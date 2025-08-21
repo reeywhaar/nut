@@ -395,7 +395,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
             // Attempt to move back one element until we're successful.
             // Move up the stack as we hit the beginning of each page in our stack.
-            for i in stack.len() - 1..=0 {
+            for i in (0..stack.len()).rev() {
                 let elem = &mut stack[i];
                 if elem.index > 0 {
                     elem.index -= 1;
