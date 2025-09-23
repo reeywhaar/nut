@@ -96,11 +96,11 @@ impl fmt::Display for Error {
             Error::TraverseFailed => "traversion failed".to_string(),
 
             Error::CheckFail(s) => format!("check failure:\n  {}", s.join("\n  ")),
-            Error::NoneError(s) => format!("value is None: {}", s),
-            Error::LockError(s) => format!("lock failed: {}", s),
-            Error::Unexpected(s) => format!("unexpected: {}", s),
+            Error::NoneError(s) => format!("value is None: {s}"),
+            Error::LockError(s) => format!("lock failed: {s}"),
+            Error::Unexpected(s) => format!("unexpected: {s}"),
         };
-        write!(f, "{}", desc)
+        write!(f, "{desc}")
     }
 }
 
@@ -157,7 +157,7 @@ impl PartialEq for Error {
             Error::CheckFail(_)
             | Error::NoneError(_)
             | Error::LockError(_)
-            | Error::Unexpected(_) => format!("{}", self) == format!("{}", o),
+            | Error::Unexpected(_) => format!("{self}") == format!("{o}"),
             _ => self.code() == o.code(),
         }
     }
@@ -195,7 +195,7 @@ impl From<IOError> for Error {
 
 impl From<Error> for String {
     fn from(e: Error) -> Self {
-        format!("{}", e)
+        format!("{e}")
     }
 }
 

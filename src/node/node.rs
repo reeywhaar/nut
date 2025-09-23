@@ -75,7 +75,7 @@ impl Node {
     /// Returns the child node at a given index.
     pub fn child_at(&mut self, index: usize) -> Result<Node, Error> {
         if self.is_leaf() {
-            return Err(format!("invalid childAt({}) on a leaf node", index).into());
+            return Err(format!("invalid childAt({index}) on a leaf node").into());
         }
         Ok(self
             .bucket_mut()
@@ -715,40 +715,6 @@ impl Node {
 
         (rindex, pgsize)
     }
-
-    /// Causes the node to copy all its inode key/value references to heap memory.
-    /// This is required when the mmap is reallocated so inodes are not pointing to stale data.
-    // pub(crate) fn dereference(&mut self) {
-    // TODO: in current implementation key,value are already copied
-    // from page so function is pointless
-
-    // if self.key.is_some() {
-    // 	self.key = self.key.clone();
-    // 	assert!(
-    // 		self.pgid == 0 || self.key.as_ref().unwrap().len() > 0,
-    // 		"dereference: zero-length node key on existing node"
-    // 	)
-    // }
-
-    // for inode in &mut self.inodes {
-    // 	inode.key = inode.key.clone();
-    // 	assert!(inode.key.len() > 0, "dereference: zero-length inode key");
-
-    // 	inode.value = inode.value.clone();
-    // }
-
-    // // Recursively dereference children.
-    // for child in &mut self.children {
-    // 	child.borrow_mut().dereference()
-    // }
-
-    // // Update statistics.
-    // {
-    // 	let txref = self.bucket().unwrap().tx.upgrade().unwrap();
-    // 	let mut tx = txref.0.write().unwrap();
-    // 	tx.stats.node_deref += 1;
-    // }
-    // }
 
     fn cmp_by_key(a: &Node, b: &Node) -> std::cmp::Ordering {
         a.0.inodes.borrow()[0].key.cmp(&b.0.inodes.borrow()[0].key)

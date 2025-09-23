@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Weak};
 use std::time::Duration;
-use std::u64;
 
 use crate::bucket::IBucket;
 use crate::consts::{Flags, MAGIC, MAX_MAP_SIZE, MAX_MMAP_STEP, PGID, VERSION};
@@ -93,7 +92,7 @@ impl<'a> DB {
         if !options.read_only {
             file.lock_exclusive().map_err(|_e| "Cannot lock db file")?;
         } else {
-            file.lock_shared().map_err(|_e| "Cannot lock db file")?;
+            fs2::FileExt::lock_shared(&file).map_err(|_e| "Cannot lock db file")?;
         };
 
         let page_size = if needs_initialization {
@@ -115,8 +114,7 @@ impl<'a> DB {
                 .map_err(|_e| "Cannot get file allocated size")?;
             if size < minimal_file_size {
                 return Err(format!(
-                    "Minimal file size {} is less than required: {}",
-                    size, minimal_file_size
+                    "Minimal file size {size} is less than required: {minimal_file_size}"
                 )
                 .into());
             }
@@ -129,7 +127,7 @@ impl<'a> DB {
             memmap2::MmapOptions::new()
                 .offset(0)
                 .map(&file)
-                .map_err(|e| format!("mmap failed: {}", e))?
+                .map_err(|e| format!("mmap failed: {e}"))?
         };
 
         let mut db = Self(Arc::new(DBInner {
@@ -180,7 +178,7 @@ impl<'a> DB {
             if !options.read_only {
                 open_opts.write(true).create(true);
             };
-            open_opts.open(&path).map_err(|e| format!("{}", e))?
+            open_opts.open(&path).map_err(|e| format!("{e}"))?
         };
 
         DB::open_file(file, path.as_ref(), options)
@@ -342,20 +340,19 @@ impl<'a> DB {
                 if strict {
                     return Err(e);
                 } else {
-                    println!("{}", e);
+                    println!("{e}");
                 }
             }
         };
         // self.munmap()?;
         self.0.opened.store(false, Ordering::Release);
 
-        self.0
-            .file
-            .try_read()
-            .ok_or("Can't acquire file lock")?
-            .get_ref()
-            .unlock()
-            .map_err(|_| "Can't unlock db file")?;
+        let file = self.0.file.try_read().ok_or("Can't acquire file lock")?;
+
+        let file = file.get_ref();
+
+        fs2::FileExt::unlock(file).map_err(|_| "Can't unlock db file")?;
+
         if self.0.autoremove && self.0.path.exists() {
             std::fs::remove_file(&self.0.path).map_err(|_| "Can't remove file")?;
         }
@@ -541,10 +538,10 @@ impl<'a> DB {
     /// except:
     ///
     /// 1. concurrent batch calls can be combined into a single
-    /// transaction.
+    ///    transaction.
     ///
     /// 2. the function passed to batch may be called multiple times,
-    /// regardless of whether it returns error or not.
+    ///    regardless of whether it returns error or not.
     ///
     /// This means that Batch function side effects must be idempotent and
     /// take permanent effect only after a successful return is seen in
@@ -632,7 +629,7 @@ impl<'a> DB {
         if !self.read_only() {
             file.get_ref()
                 .allocate(size)
-                .map_err(|e| format!("Can't allocate space: {}", e))?;
+                .map_err(|e| format!("Can't allocate space: {e}"))?;
         }
 
         // TODO: madvise
@@ -642,7 +639,7 @@ impl<'a> DB {
                 .offset(0)
                 .len(size as usize)
                 .map(file.get_ref())
-                .map_err(|e| format!("mmap failed: {}", e))?
+                .map_err(|e| format!("mmap failed: {e}"))?
         };
         *mmap_size = nmmap.len();
         *mmap = nmmap;

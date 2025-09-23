@@ -218,7 +218,7 @@ fn split_big() {
     let mut n = node_mock(&bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     for i in 1..1000 {
-        let key = format!("{:08}", i);
+        let key = format!("{i:08}");
         n.put(
             key.as_bytes(),
             key.as_bytes(),

@@ -2,7 +2,6 @@ use either::Either;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
-use std::{isize, usize};
 
 use crate::consts::{Flags, PGID};
 use crate::db::DB;
@@ -824,7 +823,7 @@ impl Bucket {
         // differently. We'll return the rootNode (if available) or the fake page.
         if self.bucket.root == 0 {
             if id != 0 {
-                return Err(format!("inline bucket non-zero page access: {} != 0", id).into());
+                return Err(format!("inline bucket non-zero page access: {id} != 0").into());
             }
             if let Some(ref node) = self.root_node {
                 return Ok(PageNode::from(node.clone()));

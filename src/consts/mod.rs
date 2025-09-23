@@ -4,9 +4,6 @@ use std::time::Duration;
 // pub(crate) const MAX_ALLOC_SIZE: usize = 0xFFFFFFF;
 pub(crate) const MAX_MAP_SIZE: u64 = 0x0FFF_FFFF;
 
-/// Are unaligned load/stores broken on this arch?
-// pub(crate) const BROKEN_UNALIGNED: bool = false;
-
 pub(crate) const MIN_KEYS_PER_PAGE: usize = 2;
 
 #[allow(clippy::upper_case_acronyms)]
@@ -55,6 +52,6 @@ impl fmt::Display for Flags {
             Flags::FREELIST => "freelist".to_string(),
             _ => panic!("unknown flag"),
         };
-        write!(f, "{}", d)
+        write!(f, "{d}")
     }
 }

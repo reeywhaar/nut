@@ -98,7 +98,7 @@ impl Batch {
 
         let mut calls = self.0.calls.try_lock().unwrap();
 
-        while calls.len() > 0 {
+        while !calls.is_empty() {
             let mut last_call_id = 0;
             if let Err(e) = db.update(Box::new(|tx| {
                 for (index, call) in calls.iter().enumerate() {
@@ -108,7 +108,7 @@ impl Batch {
                 Ok(())
             })) {
                 let failed_call = calls.remove(last_call_id);
-                failed_call.err.send(Err(format!("{}", e))).unwrap();
+                failed_call.err.send(Err(format!("{e}"))).unwrap();
                 continue;
             }
             {

@@ -93,7 +93,7 @@ impl FreeList {
         for id in p.id..=max {
             // Verify that page is not already free.
             if self.cache.contains_key(&id) {
-                return Err(format!("page {} already freed", id).into());
+                return Err(format!("page {id} already freed").into());
             }
 
             // Add to the freelist and cache.

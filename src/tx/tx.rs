@@ -265,7 +265,7 @@ impl Tx {
         {
             *page.meta_mut() = self.0.meta.try_read().unwrap().clone();
             page.meta_mut().checksum = page.meta().sum64();
-            w.write_all(page.buf()).map_err(|e| format!("{}", e))?;
+            w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
         }
 
@@ -274,16 +274,16 @@ impl Tx {
             page.id = 1;
             page.meta_mut().txid -= 1;
             page.meta_mut().checksum = page.meta().sum64();
-            w.write_all(page.buf()).map_err(|e| format!("{}", e))?;
+            w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
         }
 
         file.seek(SeekFrom::Start(page_size as u64 * 2))
-            .map_err(|e| format!("{}", e))?;
+            .map_err(|e| format!("{e}"))?;
 
         let size = self.size() as u64 - (page_size as u64 * 2);
         written += copy(&mut Read::by_ref(&mut file.get_mut()).take(size), &mut w)
-            .map_err(|e| format!("{}", e))? as usize;
+            .map_err(|e| format!("{e}"))? as usize;
 
         Ok(written as i64)
     }
@@ -397,7 +397,7 @@ impl Tx {
                         self.rollback()?;
                         return Err(e);
                     } else {
-                        println!("{}", e);
+                        println!("{e}");
                     }
                 }
             };
@@ -443,7 +443,7 @@ impl Tx {
                 if strict {
                     return Err(e);
                 } else {
-                    println!("{}", e);
+                    println!("{e}");
                 }
             }
         };
@@ -477,7 +477,7 @@ impl Tx {
             if let Some(estr) = estr {
                 errs.push(estr.clone());
             } else {
-                errs.push(format!("check thread panicked: {:?}", e));
+                errs.push(format!("check thread panicked: {e:?}"));
             }
         }
 
@@ -516,7 +516,7 @@ impl Tx {
 
         for id in &all_pgids {
             if freed.contains_key(id) {
-                return Err(format!("page {}: already freed", id).into());
+                return Err(format!("page {id}: already freed").into());
             }
             freed.insert(*id, true);
         }
@@ -558,7 +558,7 @@ impl Tx {
             let is_reachable = reachable.contains_key(&i);
             let is_freed = freed.contains_key(&i);
             if !is_reachable && !is_freed {
-                ch.send(format!("page {}: unreachable unfreed", i)).unwrap();
+                ch.send(format!("page {i}: unreachable unfreed")).unwrap();
             };
         }
     }
@@ -585,7 +585,7 @@ impl Tx {
             for i in 0..=p.overflow {
                 let id = p.id + u64::from(i);
                 if reachable.contains_key(&id) {
-                    ch.send(format!("page {}: multiple references", id))
+                    ch.send(format!("page {id}: multiple references"))
                         .unwrap();
                 }
                 reachable.insert(id, true);

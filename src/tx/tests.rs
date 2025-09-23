@@ -54,7 +54,7 @@ fn commit_multiple() {
         let mut bucket = tx.create_bucket_if_not_exists(b"bucket").unwrap();
         for n in 0..n_values {
             bucket
-                .put(format!("key-{}-{}", i, n).as_bytes(), b"value".to_vec())
+                .put(format!("key-{i}-{n}").as_bytes(), b"value".to_vec())
                 .unwrap();
         }
     }

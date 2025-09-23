@@ -382,7 +382,7 @@ impl fmt::Debug for OwnedPage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("OwnedPage")
             .field("size", &self.page.len())
-            .field("page", &self as &Page)
+            .field("page", self as &Page)
             .finish()
     }
 }

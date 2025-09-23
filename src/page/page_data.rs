@@ -21,7 +21,7 @@ impl<'a> fmt::Display for PageData<'a> {
             PageData::Meta(_) => "meta".to_string(),
             PageData::Freelist(_) => "freelist".to_string(),
         };
-        write!(f, "{}", d)
+        write!(f, "{d}")
     }
 }
 

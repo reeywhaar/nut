@@ -187,7 +187,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
     /// Returns the node that the cursor is currently positioned on.
     pub(crate) fn node(&mut self) -> Result<Node, Error> {
-        if self.stack.borrow().len() < 1 {
+        if self.stack.borrow().is_empty() {
             return Err(Error::StackEmpty);
         };
 
@@ -389,7 +389,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             let mut stack = self.stack.borrow_mut();
 
             // If we've hit the end then return nil.
-            if stack.len() == 0 {
+            if stack.is_empty() {
                 return Ok(CursorItem::new_null(None, None));
             }
 
@@ -405,7 +405,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             }
 
             // If we've hit the end then return nil.
-            if stack.len() == 0 {
+            if stack.is_empty() {
                 return Ok(CursorItem::new_null(None, None));
             }
         }

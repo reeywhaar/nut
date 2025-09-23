@@ -111,7 +111,7 @@ fn batch() {
         let mut db = db.clone();
         handles.push(std::thread::spawn(move || {
             db.batch(Box::new(move |tx| {
-                let _ = tx.create_bucket(format!("{}bubu", i).as_bytes()).unwrap();
+                let _ = tx.create_bucket(format!("{i}bubu").as_bytes()).unwrap();
                 Ok(())
             }))
             .unwrap();
@@ -124,7 +124,7 @@ fn batch() {
 
     db.view(Box::new(|tx| {
         for i in 0..10 {
-            let _ = tx.bucket(format!("{}bubu", i).as_bytes()).unwrap();
+            let _ = tx.bucket(format!("{i}bubu").as_bytes()).unwrap();
         }
         Ok(())
     }))

@@ -49,7 +49,7 @@ fn main() {
     };
 
     if let Err(result) = result {
-        eprintln!("Error: {}", result);
+        eprintln!("Error: {result}");
         std::process::exit(1);
     };
 }
@@ -207,7 +207,7 @@ fn check(o: CheckOptions) -> Result<(), String> {
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
     for err in receiver {
-        writeln!(stdout, "    {}", err).map_err(|_| "Can't write output")?;
+        writeln!(stdout, "    {err}").map_err(|_| "Can't write output")?;
         errlen += 1;
     }
     if errlen != 0 {
@@ -244,14 +244,13 @@ fn info(o: InfoOptions) -> Result<(), String> {
                 count += 1;
                 Ok(())
             }))?;
-            writeln!(&mut stdout, "\nBucket keys ({}):", count)
-                .map_err(|_| "Can't write output")?;
+            writeln!(&mut stdout, "\nBucket keys ({count}):").map_err(|_| "Can't write output")?;
             for key in bucket_keys {
                 let sanitized: String = key.clone().into_iter().map(sanitize_byte).collect();
-                writeln!(&mut stdout, "    {:<20} {:02X?}", sanitized, key)
+                writeln!(&mut stdout, "    {sanitized:<20} {key:02X?}")
                     .map_err(|_| "Can't write output")?;
             }
-            writeln!(&mut stdout, "\n{:#?}", stats).map_err(|_| "Can't write output")?;
+            writeln!(&mut stdout, "\n{stats:#?}").map_err(|_| "Can't write output")?;
         }
 
         if o.check {
@@ -344,7 +343,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
     for info in pages_info {
         match info {
             FreedOrPageInfo::Freed(id) => {
-                writeln!(&mut stdout, "{:>6} free", id).map_err(|_| "Can't write output")?
+                writeln!(&mut stdout, "{id:>6} free").map_err(|_| "Can't write output")?
             }
             FreedOrPageInfo::PageInfo(p) => writeln!(
                 &mut stdout,
