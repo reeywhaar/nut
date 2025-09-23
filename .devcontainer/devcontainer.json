@@ -1,0 +1,17 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/rust
+{
+  "name": "nut_devcnt",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "mounts": [
+    "source=nut_devcnt_target,target=/workspace/target,type=volume"
+  ],
+  "postCreateCommand": "sudo chmod 777 target",
+  "runArgs": [
+    "--name",
+    "nut_devcnt"
+  ]
+}
