@@ -1,5 +1,6 @@
 #![allow(clippy::cast_ptr_alignment, clippy::module_inception)]
 
+use anstyle::AnsiColor;
 use clap::{Args, Parser, Subcommand};
 use hexdump::{hexdump_iter, sanitize_byte};
 use nut::{Bucket, BucketStats, DBBuilder, FreedOrPageInfo, TxGuard, DB};
@@ -198,7 +199,8 @@ struct CheckOptions {
 }
 
 fn check(o: CheckOptions) -> Result<(), String> {
-    use ansi_term::Color::{Green, Red};
+    let green = AnsiColor::Green.on_default();
+    let red = AnsiColor::Red.on_default();
 
     let db = DBBuilder::new(o.path).read_only(true).build()?;
     let tx = db.begin_tx()?;
@@ -211,9 +213,9 @@ fn check(o: CheckOptions) -> Result<(), String> {
         errlen += 1;
     }
     if errlen != 0 {
-        return Err(Red.paint("Check failed").to_string());
+        return Err(format!("{red}Check failed{red:#}"));
     }
-    writeln!(stdout, "{}", Green.paint("Everything ok")).map_err(|_| "Can't write output")?;
+    writeln!(stdout, "{green}Everything ok{green:#}").map_err(|_| "Can't write output")?;
     Ok(())
 }
 
@@ -271,7 +273,7 @@ struct PagesOptions {
 }
 
 fn pages(o: PagesOptions) -> Result<(), String> {
-    use ansi_term::Color::Green;
+    let green = AnsiColor::Green.on_default();
     let db = DBBuilder::new(&o.path).read_only(true).build()?;
     let tx = db.begin_tx()?;
     let stdout = std::io::stdout();
@@ -281,18 +283,15 @@ fn pages(o: PagesOptions) -> Result<(), String> {
 
     writeln!(
         &mut stdout,
-        "{}",
-        Green.paint(format!(
-            "{:>width1$} {:<width2$} {:>width3$} {:>width4$}",
-            "ID",
-            "Type",
-            "Count",
-            "Overflow",
-            width1 = paddings.0,
-            width2 = paddings.1,
-            width3 = paddings.2,
-            width4 = paddings.3
-        ))
+        "{green}{:>width1$} {:<width2$} {:>width3$} {:>width4$}{green:#}",
+        "ID",
+        "Type",
+        "Count",
+        "Overflow",
+        width1 = paddings.0,
+        width2 = paddings.1,
+        width3 = paddings.2,
+        width4 = paddings.3
     )
     .map_err(|_| "Can't write output")?;
     writeln!(
