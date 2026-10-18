@@ -565,7 +565,7 @@ impl<'a> DB {
 
         let err_receiver = {
             let mut batch = self.0.batch.lock();
-            if batch.is_none() || batch.as_ref().unwrap().closed() {
+            if batch.as_ref().is_none_or(|b| b.closed()) {
                 *batch = Some(Batch::new(
                     weak_db,
                     self.0.max_batch_size,
@@ -655,8 +655,10 @@ impl<'a> DB {
         // Validate the meta pages. We only return an error if both meta pages fail
         // validation, since meta0 failing validation means that it wasn't saved
         // properly -- but we can recover using meta1. And vice-versa.
-        if let (Err(e), Err(_)) = (check0, check1) {
-            return Err(format!("mmap fail: {}", e).into());
+        if let Err(e) = check0
+            && check1.is_err()
+        {
+            return Err(format!("mmap fail: {e}").into());
         }
 
         Ok(())

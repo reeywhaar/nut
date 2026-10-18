@@ -704,7 +704,7 @@ impl Bucket {
     /// Returns true if a bucket is small enough to be written inline
     /// and if it contains no subbuckets. Otherwise returns false.
     fn inlineable(&self) -> bool {
-        if self.root_node().is_none() || !self.root_node().unwrap().is_leaf() {
+        if self.root_node().is_none_or(|n| !n.is_leaf()) {
             return false;
         }
 

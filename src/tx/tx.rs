@@ -377,11 +377,11 @@ impl Tx {
             self.0.meta.try_write().unwrap().freelist = page.id;
 
             // If the high water mark has moved up then attempt to grow the database.
-            if self.pgid() > tx_pgid {
-                if let Err(e) = db.grow((tx_pgid + 1) * page_size as u64) {
-                    self.rollback()?;
-                    return Err(e);
-                }
+            if self.pgid() > tx_pgid
+                && let Err(e) = db.grow((tx_pgid + 1) * page_size as u64)
+            {
+                self.rollback()?;
+                return Err(e);
             }
 
             // Write dirty pages to disk.
@@ -617,9 +617,8 @@ impl Tx {
 
     /// Returns a contiguous block of memory starting at a given page.
     pub(crate) fn allocate(&mut self, count: u64) -> Result<*mut Page, Error> {
-        let mut db = match self.db() {
-            Err(_) => return Err(Error::TxClosed),
-            Ok(db) => db,
+        let Ok(mut db) = self.db() else {
+            return Err(Error::TxClosed);
         };
 
         let mut page = db.allocate(count, self)?;
