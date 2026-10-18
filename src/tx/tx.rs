@@ -783,16 +783,10 @@ impl Tx {
 
         {
             let mut page_pool = db.0.page_pool.lock();
-            let mut i = 0;
-            while i != pages.len() {
-                if pages[i].1.size() == page_size {
-                    let mut page = pages.remove(i).1;
-                    for i in page.buf_mut() {
-                        *i = 0;
-                    }
+            for (_, mut page) in pages {
+                if page.size() == page_size {
+                    page.buf_mut().fill(0);
                     page_pool.push(page);
-                } else {
-                    i += 1;
                 }
             }
         }
