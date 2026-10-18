@@ -290,3 +290,17 @@ fn debug_with_locked_fields() {
 
     assert!(debug.contains("root: RwLock { data: <locked>"), "{debug}");
 }
+
+#[test]
+fn create_bucket_returns_bucket_errors() {
+    let mut db = db_mock().build().unwrap();
+    let mut tx = db.begin_rw_tx().unwrap();
+    let _ = tx.create_bucket(b"bucket").unwrap();
+
+    assert_eq!(tx.create_bucket(b"bucket").err(), Some(Error::BucketExists));
+    assert_eq!(tx.create_bucket(b"").err(), Some(Error::NameRequired));
+    assert_eq!(
+        tx.create_bucket_if_not_exists(b"").err(),
+        Some(Error::NameRequired)
+    );
+}

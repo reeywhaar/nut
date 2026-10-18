@@ -248,8 +248,11 @@ impl Tx {
             .try_write()
             .ok_or_else(|| Error::lock("bucket"))?;
 
-        RwLockWriteGuard::try_map(bucket, |b| b.create_bucket(key).ok())
-            .map_err(|_| "Can't get bucket".into())
+        let mut error = None;
+        RwLockWriteGuard::try_map(bucket, |b| {
+            b.create_bucket(key).map_err(|e| error = Some(e)).ok()
+        })
+        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
     }
 
     /// Creates a new bucket if it doesn't already exist.
@@ -269,8 +272,13 @@ impl Tx {
             .try_write()
             .ok_or_else(|| Error::lock("bucket"))?;
 
-        RwLockWriteGuard::try_map(bucket, |b| b.create_bucket_if_not_exists(key).ok())
-            .map_err(|_| "Can't get bucket".into())
+        let mut error = None;
+        RwLockWriteGuard::try_map(bucket, |b| {
+            b.create_bucket_if_not_exists(key)
+                .map_err(|e| error = Some(e))
+                .ok()
+        })
+        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
     }
 
     /// Deletes a bucket.
