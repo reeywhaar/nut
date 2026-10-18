@@ -120,6 +120,13 @@ let mut tx = db.begin_tx().unwrap();
 
 Crate also provides `nut` binary which is helpful to inspect database file in various ways. It can be found after `cargo build --release` in `./target/release/nut`.
 
+The binary and its dependencies are behind the `cli` feature, which is enabled by default. To use Nut as a library only, disable default features:
+
+```toml
+[dependencies]
+nut = { version = "0.1", default-features = false }
+```
+
 Excerpt from man:
 
 ```bash
