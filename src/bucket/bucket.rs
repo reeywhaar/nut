@@ -686,10 +686,13 @@ impl Bucket {
                 child.spill()?;
 
                 // Update the child bucket header in this bucket.
-                let mut vec = vec![0u8; IBucket::SIZE];
-                let bucket_ptr = vec.as_mut_ptr().cast::<IBucket>();
-                unsafe { std::ptr::copy_nonoverlapping(&raw const child.bucket, bucket_ptr, 1) };
-                vec
+                unsafe {
+                    std::slice::from_raw_parts(
+                        (&raw const child.bucket).cast::<u8>(),
+                        IBucket::SIZE,
+                    )
+                }
+                .to_vec()
             };
 
             // Skip writing the bucket if there are no materialized nodes.
@@ -779,20 +782,24 @@ impl Bucket {
         // Allocate the appropriate size.
         let n = self.root_node.as_ref().ok_or("Root node empty")?;
         let node_size = n.size();
-        let mut value = vec![0u8; IBucket::SIZE + node_size];
+        let mut value = OwnedPage::new(IBucket::SIZE + node_size);
 
         // Write a bucket header.
-        let bucket_ptr = value.as_mut_ptr().cast::<IBucket>();
-        unsafe { std::ptr::copy_nonoverlapping(&raw const self.bucket, bucket_ptr, 1) };
+        unsafe {
+            value
+                .as_mut_ptr()
+                .cast::<IBucket>()
+                .write(self.bucket.clone())
+        };
 
         // Convert byte slice to a fake page and write the root node.
         {
-            let page_buf = &mut value[IBucket::SIZE..];
+            let page_buf = &mut value.buf_mut()[IBucket::SIZE..];
             let page = Page::from_buf_mut(page_buf);
             n.write(page)?;
         }
 
-        Ok(value)
+        Ok(value.buf().to_vec())
     }
 
     /// Attempts to balance all nodes.

@@ -359,8 +359,14 @@ fn invalid_page_size_is_rejected() {
         .open(&path)
         .unwrap();
     file.seek(SeekFrom::Start(24)).unwrap();
-    file.write_all(&8u32.to_ne_bytes()).unwrap();
+    file.write_all(&4100u32.to_ne_bytes()).unwrap();
+    assert_eq!(
+        DB::get_meta(&mut file).err(),
+        Some("Invalid page size: 4100".to_string())
+    );
 
+    file.seek(SeekFrom::Start(24)).unwrap();
+    file.write_all(&8u32.to_ne_bytes()).unwrap();
     assert_eq!(
         DB::get_meta(&mut file).err(),
         Some("Invalid page size: 8".to_string())

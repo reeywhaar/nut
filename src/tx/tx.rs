@@ -806,15 +806,15 @@ impl Tx {
     pub(crate) fn write_meta(&mut self) -> Result<(), Error> {
         let mut db = self.db()?;
 
-        let mut buf = vec![0u8; db.page_size()];
-        let page = Page::from_buf_mut(&mut buf);
+        let mut buf = OwnedPage::new(db.page_size());
+        let page: &mut Page = &mut buf;
         self.0
             .meta
             .try_write()
             .ok_or_else(|| Error::lock("meta"))?
             .write(page)?;
 
-        db.write_at(0, IOCursor::new(buf))?;
+        db.write_at(0, IOCursor::new(buf.buf()))?;
 
         if !db.0.no_sync || IGNORE_NOSYNC {
             db.sync()?;

@@ -98,7 +98,7 @@ fn to_owned() {
 
     let owned = page.try_to_owned().unwrap();
     assert_eq!(
-        owned.page.len(),
+        owned.size(),
         Page::header_size() + LeafPageElement::SIZE + 23 + 10 + 3
     );
 }
@@ -160,4 +160,16 @@ fn check_bounds() {
     assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
     unsafe { *page.get_data_mut_ptr().cast::<PGID>() = u64::MAX };
     assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+}
+
+#[test]
+fn owned_page_is_aligned() {
+    for size in [5, 16, 1000, 4096] {
+        let page = OwnedPage::new(size);
+        assert!(page.as_ptr().cast::<u64>().is_aligned());
+        assert_eq!(page.buf().len(), size);
+    }
+    let page = OwnedPage::from_vec(vec![1, 2, 3]);
+    assert!(page.as_ptr().cast::<u64>().is_aligned());
+    assert_eq!(page.buf(), &[1, 2, 3]);
 }

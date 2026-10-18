@@ -381,7 +381,8 @@ impl Page {
 #[derive(Clone)]
 #[repr(align(64))]
 pub(crate) struct OwnedPage {
-    page: Vec<u8>,
+    page: Vec<u64>,
+    len: usize,
 }
 
 // unsafe impl Send for Page {}
@@ -389,50 +390,53 @@ pub(crate) struct OwnedPage {
 
 impl OwnedPage {
     pub(crate) fn new(size: PageSize) -> Self {
+        let words = size.max(Page::header_size()).div_ceil(size_of::<u64>());
         Self {
-            page: vec![0u8; size],
+            page: vec![0; words],
+            len: size,
         }
     }
 
     pub(crate) fn from_vec(buf: Vec<u8>) -> Self {
-        Self { page: buf }
+        let mut page = Self::new(buf.len());
+        page.buf_mut().copy_from_slice(&buf);
+        page
     }
 
     /// returns page size
     #[inline]
     pub(crate) fn size(&self) -> PageSize {
-        self.page.len()
+        self.len
     }
 
     /// reservec capacity of underlying vector to size
     #[expect(dead_code)]
     pub(crate) fn reserve(&mut self, size: usize) {
-        self.page.reserve(size)
+        self.page.reserve(size.div_ceil(size_of::<u64>()))
     }
 
     /// Returns pointer to page structure
     #[inline]
     pub(crate) fn as_ptr(&self) -> *const u8 {
-        self.page.as_ptr()
+        self.page.as_ptr().cast()
     }
 
     /// Returns pointer to page structure
-    #[expect(dead_code)]
     #[inline]
     pub(crate) fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.page.as_mut_ptr()
+        self.page.as_mut_ptr().cast()
     }
 
     /// Returns binary serialized buffer of a page
     #[inline]
     pub(crate) fn buf(&self) -> &[u8] {
-        &self.page
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len) }
     }
 
     /// Returns binary serialized muttable buffer of a page
     #[inline]
     pub(crate) fn buf_mut(&mut self) -> &mut [u8] {
-        &mut self.page
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
     }
 }
 
@@ -469,7 +473,7 @@ impl DerefMut for OwnedPage {
 impl fmt::Debug for OwnedPage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("OwnedPage")
-            .field("size", &self.page.len())
+            .field("size", &self.len)
             .field("page", self as &Page)
             .finish()
     }

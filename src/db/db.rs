@@ -99,9 +99,9 @@ impl<'a> DB {
         let page_size = if needs_initialization {
             options.page_size
         } else {
-            let mut buf = vec![0u8; 1000];
-            file.read_exact(&mut buf)?;
-            let page = Page::from_buf(&buf);
+            let mut buf = OwnedPage::new(1000);
+            file.read_exact(buf.buf_mut())?;
+            let page: &Page = &buf;
             if page.flags != Flags::META {
                 return Err(Error::Invalid);
             }
@@ -201,12 +201,12 @@ impl<'a> DB {
             check_page_size(u32::from_ne_bytes([buf[8], buf[9], buf[10], buf[11]]) as usize)?;
         file.seek(SeekFrom::Start(0))
             .map_err(|e| format!("Can't seek file: {e}"))?;
-        let mut metabuf = vec![0u8; page_size * 2];
-        file.read_exact(&mut metabuf)
+        let mut metabuf = OwnedPage::new(page_size * 2);
+        file.read_exact(metabuf.buf_mut())
             .map_err(|e| format!("Can't read file to buffer: {e}"))?;
 
-        let metap0 = unsafe { &*(&raw const metabuf[0]).cast::<Page>() };
-        let metap1 = unsafe { &*(&raw const metabuf[page_size]).cast::<Page>() };
+        let metap0 = Page::from_buf(&metabuf.buf()[..page_size]);
+        let metap1 = Page::from_buf(&metabuf.buf()[page_size..]);
 
         newest_valid_meta([metap0, metap1]).ok_or_else(|| "Invalid meta".to_string())
     }
@@ -278,9 +278,9 @@ impl<'a> DB {
     }
 
     pub(super) fn init(&mut self) -> Result<(), Error> {
-        let mut buf = vec![0u8; self.0.page_size * 4];
+        let mut buf = OwnedPage::new(self.0.page_size * 4);
         for i in 0..=1 {
-            let p = self.page_in_buffer(&mut buf, i);
+            let p = self.page_in_buffer(buf.buf_mut(), i);
             p.id = i;
             p.flags = Flags::META;
             let m = p.meta_mut()?;
@@ -298,15 +298,15 @@ impl<'a> DB {
             m.checksum = m.sum64();
         }
 
-        let p = self.page_in_buffer(&mut buf, 2);
+        let p = self.page_in_buffer(buf.buf_mut(), 2);
         p.id = 2;
         p.flags = Flags::FREELIST;
 
-        let p = self.page_in_buffer(&mut buf, 3);
+        let p = self.page_in_buffer(buf.buf_mut(), 3);
         p.id = 3;
         p.flags = Flags::LEAVES;
 
-        self.write_at(0, std::io::Cursor::new(&mut buf))?;
+        self.write_at(0, std::io::Cursor::new(buf.buf()))?;
         self.sync()?;
 
         Ok(())
@@ -927,7 +927,8 @@ fn newest_valid_meta<'a>(pages: impl IntoIterator<Item = &'a Page>) -> Option<Me
 }
 
 fn check_page_size(page_size: usize) -> Result<usize, String> {
-    if page_size < Page::header_size() + Meta::SIZE {
+    if page_size < Page::header_size() + Meta::SIZE || !page_size.is_multiple_of(align_of::<Page>())
+    {
         return Err(format!("Invalid page size: {page_size}"));
     }
     Ok(page_size)
