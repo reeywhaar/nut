@@ -336,8 +336,14 @@ impl Tx {
         let tx = db.remove_tx(self)?;
 
         *tx.0.db.write() = WeakDB::new();
-        tx.0.root.try_write().unwrap().clear();
-        tx.0.pages.try_write().unwrap().clear();
+        tx.0.root
+            .try_write()
+            .ok_or_else(|| Error::lock("bucket"))?
+            .clear();
+        tx.0.pages
+            .try_write()
+            .ok_or_else(|| Error::lock("pages"))?
+            .clear();
         Ok(())
     }
 
@@ -351,11 +357,23 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
+        let result = self.__commit();
+        if result.is_err() && self.db().is_ok() {
+            self.__rollback()?;
+        }
+        result
+    }
+
+    fn __commit(&mut self) -> Result<(), Error> {
         let mut db = self.db()?;
 
         {
             let start_time = SystemTime::now();
-            self.0.root.try_write().unwrap().rebalance();
+            self.0
+                .root
+                .try_write()
+                .ok_or_else(|| Error::lock("bucket"))?
+                .rebalance();
             let mut stats = self.0.stats.lock();
             if stats.rebalance > 0 {
                 stats.rebalance_time += SystemTime::now().duration_since(start_time)?;
@@ -365,67 +383,76 @@ impl Tx {
         {
             // spill
             let start_time = SystemTime::now();
-            let spilled = self.0.root.try_write().unwrap().spill();
-            if let Err(e) = spilled {
-                self.rollback()?;
-                return Err(e);
-            }
-            self.0.stats.try_lock().unwrap().spill_time =
-                SystemTime::now().duration_since(start_time)?;
+            self.0
+                .root
+                .try_write()
+                .ok_or_else(|| Error::lock("bucket"))?
+                .spill()?;
+            self.0
+                .stats
+                .try_lock()
+                .ok_or_else(|| Error::lock("stats"))?
+                .spill_time = SystemTime::now().duration_since(start_time)?;
         }
 
         // Free the old root bucket.
-        self.0.meta.try_write().unwrap().root.root = self.0.root.try_read().unwrap().bucket.root;
+        let root = self
+            .0
+            .root
+            .try_read()
+            .ok_or_else(|| Error::lock("bucket"))?
+            .bucket
+            .root;
+        self.0
+            .meta
+            .try_write()
+            .ok_or_else(|| Error::lock("meta"))?
+            .root
+            .root = root;
 
         let (txid, tx_pgid, freelist_pgid) = {
-            let meta = self.0.meta.try_read().unwrap();
+            let meta = self.0.meta.try_read().ok_or_else(|| Error::lock("meta"))?;
             (meta.txid as usize, meta.pgid, meta.freelist)
         };
 
         let (freelist_size, page_size) = {
             // Free the freelist and allocate new pages for it. This will overestimate
             // the size of the freelist but not underestimate the size (which would be bad).
-            let freed = {
-                let page = db.page(freelist_pgid);
-                db.0.freelist.try_write().unwrap().free(txid as u64, &page)
-            };
-            if let Err(e) = freed {
-                self.rollback()?;
-                return Err(e);
-            }
+            let page = db.page(freelist_pgid);
+            let mut freelist =
+                db.0.freelist
+                    .try_write()
+                    .ok_or_else(|| Error::lock("freelist"))?;
+            freelist.free(txid as u64, &page)?;
 
-            let freelist_size = db.0.freelist.try_read().unwrap().size();
+            let freelist_size = freelist.size();
             let page_size = db.page_size();
 
             (freelist_size, page_size)
         };
 
         {
-            let page = self.allocate((freelist_size / page_size) as u64 + 1);
-            if let Err(e) = page {
-                self.rollback()?;
-                return Err(e);
-            }
-            let page = page?;
+            let page = self.allocate((freelist_size / page_size) as u64 + 1)?;
             let page = unsafe { &mut *page };
 
-            db.0.freelist.try_write().unwrap().write(page);
-            self.0.meta.try_write().unwrap().freelist = page.id;
+            db.0.freelist
+                .try_write()
+                .ok_or_else(|| Error::lock("freelist"))?
+                .write(page);
+            self.0
+                .meta
+                .try_write()
+                .ok_or_else(|| Error::lock("meta"))?
+                .freelist = page.id;
 
             // If the high water mark has moved up then attempt to grow the database.
-            if self.pgid() > tx_pgid
-                && let Err(e) = db.grow((tx_pgid + 1) * page_size as u64)
-            {
-                self.rollback()?;
-                return Err(e);
+            if self.pgid() > tx_pgid {
+                db.grow((tx_pgid + 1) * page_size as u64)?;
             }
 
             // Write dirty pages to disk.
             let write_start_time = SystemTime::now();
-            if let Err(e) = self.write() {
-                self.rollback()?;
-                return Err(e);
-            }
+            self.write()?;
 
             // If strict mode is enabled then perform a consistency check.
             // Only the first consistency error is reported in the panic.
@@ -433,7 +460,6 @@ impl Tx {
                 let strict = db.0.check_mode.contains(CheckMode::STRICT);
                 if let Err(e) = self.check_sync() {
                     if strict {
-                        self.rollback()?;
                         return Err(e);
                     } else {
                         println!("{e}");
@@ -444,19 +470,26 @@ impl Tx {
             // Write meta to disk.
             if let Err(e) = self.write_meta() {
                 self.0.check.store(false, Ordering::Release);
-                self.rollback()?;
                 return Err(e);
             };
 
-            self.0.stats.try_lock().unwrap().write_time +=
-                SystemTime::now().duration_since(write_start_time)?;
+            self.0
+                .stats
+                .try_lock()
+                .ok_or_else(|| Error::lock("stats"))?
+                .write_time += SystemTime::now().duration_since(write_start_time)?;
         };
 
         // Finalize the transaction.
         self.close()?;
 
         {
-            for h in &*self.0.commit_handlers.try_lock().unwrap() {
+            for h in &*self
+                .0
+                .commit_handlers
+                .try_lock()
+                .ok_or_else(|| Error::lock("commit handlers"))?
+            {
                 h();
             }
         }
