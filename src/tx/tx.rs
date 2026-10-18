@@ -335,9 +335,10 @@ impl Tx {
         {
             // spill
             let start_time = SystemTime::now();
-            {
-                let mut root = self.0.root.try_write().unwrap();
-                root.spill()?;
+            let spilled = self.0.root.try_write().unwrap().spill();
+            if let Err(e) = spilled {
+                self.rollback()?;
+                return Err(e);
             }
             self.0.stats.try_lock().unwrap().spill_time =
                 SystemTime::now().duration_since(start_time)?;
@@ -354,11 +355,16 @@ impl Tx {
         let (freelist_size, page_size) = {
             // Free the freelist and allocate new pages for it. This will overestimate
             // the size of the freelist but not underestimate the size (which would be bad).
-            let page = db.page(freelist_pgid);
-            let mut freelist = db.0.freelist.try_write().unwrap();
-            freelist.free(txid as u64, &page)?;
+            let freed = {
+                let page = db.page(freelist_pgid);
+                db.0.freelist.try_write().unwrap().free(txid as u64, &page)
+            };
+            if let Err(e) = freed {
+                self.rollback()?;
+                return Err(e);
+            }
 
-            let freelist_size = freelist.size();
+            let freelist_size = db.0.freelist.try_read().unwrap().size();
             let page_size = db.page_size();
 
             (freelist_size, page_size)
