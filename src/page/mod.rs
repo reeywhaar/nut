@@ -266,14 +266,12 @@ impl Page {
     }
 
     /// Retrieves a list of branch nodes
-    #[expect(dead_code)]
     pub(crate) fn branch_page_elements_mut(&mut self) -> Result<&mut [BranchPageElement], Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let elements = &mut *(self.branch_page_elements()? as *const [BranchPageElement]
-                as *mut [BranchPageElement]);
-            Ok(elements)
+        if self.flags != Flags::BRANCHES {
+            return Err(Error::corrupted("Flags are not branches"));
         }
+        let count = self.count as usize;
+        Ok(unsafe { std::slice::from_raw_parts_mut(self.get_data_mut_ptr().cast(), count) })
     }
 
     /// Retrieves the branch node by index
@@ -288,12 +286,10 @@ impl Page {
         &mut self,
         index: usize,
     ) -> Result<&mut BranchPageElement, Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let element = &mut *(self.branch_page_element(index)? as *const BranchPageElement
-                as *mut BranchPageElement);
-            Ok(element)
-        }
+        let id = self.id;
+        self.branch_page_elements_mut()?
+            .get_mut(index)
+            .ok_or_else(|| Error::corrupted(format!("Page {id}: element {index} out of range")))
     }
 
     /// Retrieves a list of leaf nodes
@@ -305,14 +301,12 @@ impl Page {
     }
 
     /// Retrieves a list of leaf nodes
-    #[expect(dead_code)]
     pub(crate) fn leaf_page_elements_mut(&mut self) -> Result<&mut [LeafPageElement], Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let elements = &mut *(self.leaf_page_elements()? as *const [LeafPageElement]
-                as *mut [LeafPageElement]);
-            Ok(elements)
+        if self.flags != Flags::LEAVES {
+            return Err(Error::corrupted("Flags are not leaves"));
         }
+        let count = self.count as usize;
+        Ok(unsafe { std::slice::from_raw_parts_mut(self.get_data_mut_ptr().cast(), count) })
     }
 
     /// Retrieves the leaf node by index
@@ -327,12 +321,10 @@ impl Page {
         &mut self,
         index: usize,
     ) -> Result<&mut LeafPageElement, Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let element = &mut *(self.leaf_page_element(index)? as *const LeafPageElement
-                as *mut LeafPageElement);
-            Ok(element)
-        }
+        let id = self.id;
+        self.leaf_page_elements_mut()?
+            .get_mut(index)
+            .ok_or_else(|| Error::corrupted(format!("Page {id}: element {index} out of range")))
     }
 
     /// returns a pointer to the metadata section of the page.
@@ -345,11 +337,10 @@ impl Page {
 
     /// returns a pointer to the metadata section of the page.
     pub(crate) fn meta_mut(&mut self) -> Result<&mut Meta, Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let meta = &mut *(self.meta()? as *const Meta as *mut Meta);
-            Ok(meta)
+        if self.flags != Flags::META {
+            return Err(Error::corrupted("Flags are not meta"));
         }
+        Ok(unsafe { &mut *self.get_data_mut_ptr().cast::<Meta>() })
     }
 
     /// meta returns a pointer to the freelist section of the page.
@@ -362,11 +353,17 @@ impl Page {
 
     /// meta returns a pointer to the freelist section of the page.
     pub(crate) fn freelist_mut(&mut self) -> Result<&mut [PGID], Error> {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            let list = &mut *(self.freelist()? as *const [PGID] as *mut [PGID]);
-            Ok(list)
+        if self.flags != Flags::FREELIST {
+            return Err(Error::corrupted("Flags are not freelist"));
         }
+        let count = self.count as usize;
+        let ptr = self.get_data_mut_ptr().cast::<PGID>();
+        let len = if count == 0xFFFF {
+            1 + unsafe { *ptr } as usize
+        } else {
+            count
+        };
+        Ok(unsafe { std::slice::from_raw_parts_mut(ptr, len) })
     }
 }
 
