@@ -29,13 +29,6 @@ impl From<Node> for PageNode {
 }
 
 impl PageNode {
-    pub(crate) fn get_page(&self) -> &Page {
-        match self.0 {
-            Either::Left(p) => unsafe { &*p },
-            Either::Right(ref _n) => panic!("ElemRef not page"),
-        }
-    }
-
     pub(crate) fn upgrade(&self) -> Either<&Page, &Node> {
         match self.0 {
             Either::Left(p) => unsafe { Either::Left(&*p) },
@@ -44,16 +37,16 @@ impl PageNode {
     }
 
     pub(crate) fn is_leaf(&self) -> bool {
-        match self.0 {
-            Either::Left(_) => self.get_page().flags == Flags::LEAVES,
-            Either::Right(ref n) => n.is_leaf(),
+        match self.upgrade() {
+            Either::Left(p) => p.flags == Flags::LEAVES,
+            Either::Right(n) => n.is_leaf(),
         }
     }
 
     pub(crate) fn count(&self) -> usize {
-        match self.0 {
-            Either::Left(ref _p) => self.get_page().count as usize,
-            Either::Right(ref n) => n.0.inodes.borrow().len(),
+        match self.upgrade() {
+            Either::Left(p) => p.count as usize,
+            Either::Right(n) => n.0.inodes.borrow().len(),
         }
     }
 }
