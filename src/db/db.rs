@@ -166,7 +166,10 @@ impl<'a> DB {
             let freelist_id = db.meta()?.freelist;
             db.mmap((freelist_id + 1) * db.0.page_size as u64)?;
             let freelist_page = db.page(freelist_id);
-            db.0.freelist.try_write().unwrap().read(&freelist_page);
+            db.0.freelist
+                .try_write()
+                .ok_or("Can't acquire freelist")?
+                .read(&freelist_page);
         }
 
         Ok(db)
@@ -262,7 +265,11 @@ impl<'a> DB {
 
             Ok(tx)
         } else {
-            let mut txs = self.0.txs.try_write_for(Duration::from_secs(10)).unwrap();
+            let mut txs = self
+                .0
+                .txs
+                .try_write_for(Duration::from_secs(10))
+                .ok_or("Can't acquire txs")?;
 
             let index = txs.iter().position(|dbtx| Arc::ptr_eq(&tx.0, &dbtx.0));
             debug_assert!(index.is_some(), "trying to remove nonexistent tx");
@@ -793,7 +800,7 @@ impl<'a> DB {
             return Err(Error::DatabaseReadonly);
         };
 
-        let file = self.0.file.try_write().unwrap();
+        let file = self.0.file.try_write().ok_or("Can't acquire file lock")?;
 
         if file.get_ref().metadata()?.len() >= size {
             return Ok(());
@@ -802,7 +809,13 @@ impl<'a> DB {
         // If the data is smaller than the alloc size then only allocate what's needed.
         // Once it goes over the allocation size then allocate in chunks.
         {
-            let mmapsize = self.0.mmap.try_read().unwrap().as_ref().len() as u64;
+            let mmapsize = self
+                .0
+                .mmap
+                .try_read()
+                .ok_or("Can't acquire mmap lock")?
+                .as_ref()
+                .len() as u64;
             if mmapsize < self.0.alloc_size {
                 size = mmapsize;
             } else {

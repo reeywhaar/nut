@@ -115,7 +115,7 @@ impl Tx {
         self.0
             .db
             .try_read()
-            .unwrap()
+            .ok_or(Error::TxClosed)?
             .upgrade()
             .ok_or(Error::DatabaseGone)
     }
@@ -230,7 +230,11 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
-        self.0.root.try_write().unwrap().delete_bucket(key)
+        self.0
+            .root
+            .try_write()
+            .ok_or("Can't acquire bucket")?
+            .delete_bucket(key)
     }
 
     #[expect(clippy::type_complexity)]
@@ -243,7 +247,7 @@ impl Tx {
         &self,
         mut handler: Box<dyn FnMut(&[u8], Option<&Bucket>) -> Result<(), E> + 'a>,
     ) -> Result<(), Error> {
-        let root = self.0.root.try_write().unwrap();
+        let root = self.0.root.try_write().ok_or("Can't acquire bucket")?;
         root.for_each(Box::new(|k: &[u8], _v: Option<&[u8]>| -> Result<(), E> {
             handler(k, root.bucket(k))
         }))
@@ -266,7 +270,7 @@ impl Tx {
 
         // first page
         {
-            *page.meta_mut() = self.0.meta.try_read().unwrap().clone();
+            *page.meta_mut() = self.0.meta.try_read().ok_or("Can't acquire meta")?.clone();
             page.meta_mut().checksum = page.meta().sum64();
             w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
@@ -514,7 +518,13 @@ impl Tx {
 
     pub fn freed(&self) -> Result<HashMap<PGID, bool>, Error> {
         let mut freed = HashMap::<PGID, bool>::new();
-        let all_pgids = self.db()?.0.freelist.try_read().unwrap().get_pgids();
+        let all_pgids = self
+            .db()?
+            .0
+            .freelist
+            .try_read()
+            .ok_or("Can't acquire freelist")?
+            .get_pgids();
 
         for id in &all_pgids {
             if freed.contains_key(id) {
@@ -624,7 +634,11 @@ impl Tx {
         let page_id = page.id;
         let page_ptr = &raw mut *page;
 
-        self.0.pages.try_write().unwrap().insert(page_id, page);
+        self.0
+            .pages
+            .try_write()
+            .ok_or("Can't acquire pages")?
+            .insert(page_id, page);
 
         // Update statistics.
         {
@@ -691,7 +705,11 @@ impl Tx {
 
         let mut buf = vec![0u8; db.page_size()];
         let page = Page::from_buf_mut(&mut buf);
-        self.0.meta.try_write().unwrap().write(page)?;
+        self.0
+            .meta
+            .try_write()
+            .ok_or("Can't acquire meta")?
+            .write(page)?;
 
         db.write_at(0, IOCursor::new(buf))?;
 
@@ -708,7 +726,7 @@ impl Tx {
     pub(crate) fn page(&self, id: PGID) -> Result<*const Page, Error> {
         // Check the dirty pages first.
         {
-            let pages = self.0.pages.try_read().unwrap();
+            let pages = self.0.pages.try_read().ok_or("Can't acquire pages")?;
             if let Some(p) = pages.get(&id) {
                 return Ok(&raw const **p);
             }
@@ -764,7 +782,13 @@ impl Tx {
         };
 
         // Determine the type (or if it's free).
-        if !db.0.freelist.try_read().unwrap().freed(id as u64) {
+        if !db
+            .0
+            .freelist
+            .try_read()
+            .ok_or("Can't acquire freelist")?
+            .freed(id as u64)
+        {
             info.ptype = p.flags
         }
 

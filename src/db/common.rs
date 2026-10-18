@@ -69,7 +69,11 @@ impl Batch {
             return Err("batch already run".into());
         };
         let calls_len = {
-            let mut calls = self.0.calls.try_lock_for(Duration::from_secs(10)).unwrap();
+            let mut calls = self
+                .0
+                .calls
+                .try_lock_for(Duration::from_secs(10))
+                .ok_or("Can't acquire batch calls")?;
             calls.push(call);
             calls.len()
         };
