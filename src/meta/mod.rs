@@ -3,6 +3,7 @@ mod tests;
 
 use fnv::FnvHasher;
 use std::hash::Hasher;
+use std::mem::offset_of;
 
 use crate::bucket::IBucket;
 use crate::consts::{MAGIC, PGID, TXID, VERSION};

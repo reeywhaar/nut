@@ -6,6 +6,7 @@ pub mod tests;
 use std::borrow::{Borrow, BorrowMut, ToOwned};
 use std::fmt;
 use std::marker::PhantomData;
+use std::mem::offset_of;
 use std::ops::{Deref, DerefMut};
 
 mod branch_page_element;

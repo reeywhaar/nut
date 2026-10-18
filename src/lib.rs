@@ -93,12 +93,6 @@
 
 #![allow(clippy::cast_ptr_alignment, clippy::module_inception)]
 
-#[macro_use]
-extern crate memoffset;
-
-#[macro_use]
-extern crate bitflags;
-
 #[cfg(test)]
 mod test_utils;
 

@@ -24,7 +24,6 @@ cli = ["dep:clap", "dep:hexdump", "dep:anstyle"]
 [dependencies]
 fnv = "1.0.7"
 poolcache = "0.1.1"
-memoffset = "0.9.1"
 fs4 = "1.1.0"
 page_size = "0.6.0"
 memmap2 = "0.9.11"

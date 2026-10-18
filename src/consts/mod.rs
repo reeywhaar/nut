@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use std::fmt;
 use std::time::Duration;
 

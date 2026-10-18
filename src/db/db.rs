@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use fs4::FileExt;
 use lock_api::{RawMutex, RawRwLock};
 use parking_lot::{MappedRwLockReadGuard, Mutex, RwLock, RwLockReadGuard};
