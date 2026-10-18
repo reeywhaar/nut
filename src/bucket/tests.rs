@@ -138,3 +138,25 @@ fn try_variants() {
         format!("{:?}", root.stats())
     );
 }
+
+#[test]
+fn open_bucket_checks_value() {
+    let bucket = bucket_mock(WeakTx::new());
+    assert_eq!(
+        bucket.open_bucket(vec![0; 8]).err(),
+        Some(Error::Unexpected("Bucket value too short: 8".to_string()))
+    );
+
+    let mut value = vec![0u8; 16];
+    value.extend(0u64.to_ne_bytes());
+    value.extend(2u16.to_ne_bytes());
+    value.extend(1u16.to_ne_bytes());
+    value.extend(0u32.to_ne_bytes());
+    for field in [0u32, 16, 1000, 0] {
+        value.extend(field.to_ne_bytes());
+    }
+    assert_eq!(
+        bucket.open_bucket(value).err(),
+        Some(Error::Unexpected("Page 0: data out of bounds".to_string()))
+    );
+}

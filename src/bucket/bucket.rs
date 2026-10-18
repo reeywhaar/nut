@@ -123,7 +123,7 @@ impl Bucket {
         };
 
         // Otherwise create a bucket and cache it.
-        let child = self.open_bucket(value);
+        let child = self.open_bucket(value)?;
 
         let mut buckets = self.buckets.borrow_mut();
         let bucket = match buckets.entry(name.to_vec()) {
@@ -166,7 +166,10 @@ impl Bucket {
     /// from a parent into a Bucket
     ///
     /// value is bytes serialized bucket
-    pub(crate) fn open_bucket(&self, value: Vec<u8>) -> Bucket {
+    pub(crate) fn open_bucket(&self, value: Vec<u8>) -> Result<Bucket, Error> {
+        if value.len() < IBucket::SIZE {
+            return Err(format!("Bucket value too short: {}", value.len()).into());
+        }
         let mut child = Bucket::new(self.tx.clone());
         // let value = unsafe { value.as_ref().unwrap() };
 
@@ -185,7 +188,7 @@ impl Bucket {
         {
             // TODO:
             // if self.tx().unwrap().writable() {
-            let b = unsafe { (*value.as_ptr().cast::<IBucket>()).clone() };
+            let b = unsafe { value.as_ptr().cast::<IBucket>().read_unaligned() };
             child.bucket = b;
         }
 
@@ -198,11 +201,13 @@ impl Bucket {
                 vec
             };
 
+            let len = data.len();
             let p = OwnedPage::from_vec(data);
+            p.check_bounds(len)?;
             child.page = Some(p);
         }
 
-        child
+        Ok(child)
     }
 
     pub(crate) fn clear(&mut self) {
@@ -558,7 +563,7 @@ impl Bucket {
                             if (e.flags & Self::FLAG) != 0 {
                                 // For any bucket element, open the element value
                                 // and recursively call Stats on the contained bucket.
-                                sub_stats += self.open_bucket(e.value().to_vec()).try_stats()?;
+                                sub_stats += self.open_bucket(e.value().to_vec())?.try_stats()?;
                             };
                         }
                     }
