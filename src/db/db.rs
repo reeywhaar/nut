@@ -731,15 +731,35 @@ impl<'a> DB {
     }
 
     pub fn stats(&self) -> Stats {
-        self.0.stats.try_read().unwrap().clone()
+        self.try_stats().unwrap()
+    }
+
+    /// Same as [`DB::stats`], but returns an error instead of panicking.
+    pub fn try_stats(&self) -> Result<Stats, Error> {
+        Ok(self
+            .0
+            .stats
+            .try_read()
+            .ok_or_else(|| Error::lock("stats"))?
+            .clone())
     }
 
     pub fn info(&self) -> Info {
-        let ptr = self.0.mmap.try_read().unwrap().as_ref()[0] as *const u8;
-        Info {
+        self.try_info().unwrap()
+    }
+
+    /// Same as [`DB::info`], but returns an error instead of panicking.
+    pub fn try_info(&self) -> Result<Info, Error> {
+        let ptr = self
+            .0
+            .mmap
+            .try_read()
+            .ok_or_else(|| Error::lock("mmap"))?
+            .as_ref()[0] as *const u8;
+        Ok(Info {
             data: ptr,
             page_size: self.0.page_size as i64,
-        }
+        })
     }
 
     /// Retrieves page from mmap

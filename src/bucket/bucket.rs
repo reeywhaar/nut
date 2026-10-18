@@ -106,27 +106,27 @@ impl Bucket {
         Ok(Cursor::new(self))
     }
 
-    fn bucket_ptr(&self, name: &[u8]) -> Option<*mut Bucket> {
+    fn bucket_ptr(&self, name: &[u8]) -> Result<Option<*mut Bucket>, Error> {
         if let Some(b) = self.buckets.borrow_mut().get_mut(name) {
-            return Some(b);
+            return Ok(Some(b));
         };
-        let (key, value) = {
-            let c = self.cursor().unwrap();
-            let (key, value, flags) = c.seek_to_item(name).unwrap().unwrap();
+        let value = {
+            let c = self.cursor()?;
+            let (key, value, flags) = c.seek_to_item(name)?.unwrap();
 
             // Return None if the key doesn't exist or it is not a bucket.
             if key != Some(name) || (flags & Self::FLAG) == 0 {
-                return None;
+                return Ok(None);
             };
 
-            (key.map(|k| k.to_vec()), value.map(|v| v.to_vec()))
+            value.ok_or("Value empty")?.to_vec()
         };
 
         // Otherwise create a bucket and cache it.
-        let child = self.open_bucket(value.unwrap());
+        let child = self.open_bucket(value);
 
         let mut buckets = self.buckets.borrow_mut();
-        let bucket = match buckets.entry(key.unwrap()) {
+        let bucket = match buckets.entry(name.to_vec()) {
             Entry::Vacant(e) => e.insert(child),
             Entry::Occupied(e) => {
                 let c = e.into_mut();
@@ -134,22 +134,32 @@ impl Bucket {
                 c
             }
         };
-        Some(bucket)
+        Ok(Some(bucket))
     }
 
     /// Retrieves a nested bucket by name.
     /// Returns None if the bucket does not exist or found item is not bucket.
     pub fn bucket(&self, key: &[u8]) -> Option<&Bucket> {
-        self.bucket_ptr(key).map(|b| unsafe { &*b })
+        self.try_bucket(key).unwrap()
+    }
+
+    /// Same as [`Bucket::bucket`], but returns an error instead of panicking.
+    pub fn try_bucket(&self, key: &[u8]) -> Result<Option<&Bucket>, Error> {
+        Ok(self.bucket_ptr(key)?.map(|b| unsafe { &*b }))
     }
 
     /// Retrieves a nested mutable bucket by name.
     /// Returns None if the bucket does not exist or found item is not bucket.
     pub fn bucket_mut(&mut self, key: &[u8]) -> Option<&mut Bucket> {
-        if !self.tx().unwrap().writable() {
-            return None;
+        self.try_bucket_mut(key).unwrap()
+    }
+
+    /// Same as [`Bucket::bucket_mut`], but returns an error instead of panicking.
+    pub fn try_bucket_mut(&mut self, key: &[u8]) -> Result<Option<&mut Bucket>, Error> {
+        if !self.tx()?.writable() {
+            return Ok(None);
         };
-        self.bucket_ptr(key).map(|b| unsafe { &mut *b })
+        Ok(self.bucket_ptr(key)?.map(|b| unsafe { &mut *b }))
     }
 
     /// Helper method that re-interprets a sub-bucket value
@@ -307,15 +317,19 @@ impl Bucket {
 
     /// Returns list of subbuckets' keys
     pub fn buckets(&self) -> Vec<Vec<u8>> {
+        self.try_buckets().unwrap()
+    }
+
+    /// Same as [`Bucket::buckets`], but returns an error instead of panicking.
+    pub fn try_buckets(&self) -> Result<Vec<Vec<u8>>, Error> {
         let mut names = vec![];
         self.for_each(Box::new(|k, v| -> Result<(), Error> {
             if v.is_none() {
                 names.push(k.to_vec());
             }
             Ok(())
-        }))
-        .unwrap();
-        names
+        }))?;
+        Ok(names)
     }
 
     /// Retrieves the value for a key in the bucket.
@@ -333,20 +347,25 @@ impl Bucket {
     /// assert_eq!(flowers.get(b"irises").unwrap(), &b"Iris is a genus of species of flowering plants"[..]);
     /// ```
     pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        let (ckey, value, flags) = self.cursor().unwrap().seek(key).unwrap().unwrap();
+        self.try_get(key).unwrap()
+    }
+
+    /// Same as [`Bucket::get`], but returns an error instead of panicking.
+    pub fn try_get(&self, key: &[u8]) -> Result<Option<&[u8]>, Error> {
+        let (ckey, value, flags) = self.cursor()?.seek(key)?.unwrap();
         // let value = value.map(|v| v.to_vec());
 
         // Return nil if this is a bucket.
         if (flags & Self::FLAG) != 0 {
-            return None;
+            return Ok(None);
         }
 
         // If our target node isn't the same key as what's passed in then return nil.
         if ckey != Some(key) {
-            return None;
+            return Ok(None);
         }
 
-        value
+        Ok(value)
     }
 
     /// Sets the value for a key in the bucket.
@@ -494,9 +513,14 @@ impl Bucket {
 
     /// Returns stats on a bucket.
     pub fn stats(&self) -> BucketStats {
+        self.try_stats().unwrap()
+    }
+
+    /// Same as [`Bucket::stats`], but returns an error instead of panicking.
+    pub fn try_stats(&self) -> Result<BucketStats, Error> {
         let mut stats = BucketStats::default();
         let mut sub_stats = BucketStats::default();
-        let page_size = self.tx().unwrap().db().unwrap().page_size();
+        let page_size = self.tx()?.db()?.page_size();
         stats.bucket_n += 1;
         if self.bucket.root == 0 {
             stats.inline_bucket_n += 1;
@@ -534,7 +558,7 @@ impl Bucket {
                             if (e.flags & Self::FLAG) != 0 {
                                 // For any bucket element, open the element value
                                 // and recursively call Stats on the contained bucket.
-                                sub_stats += self.open_bucket(e.value().to_vec()).stats();
+                                sub_stats += self.open_bucket(e.value().to_vec()).try_stats()?;
                             };
                         }
                     }
@@ -561,8 +585,7 @@ impl Bucket {
                 stats.depth = depth + 1;
             }
             Ok(())
-        }))
-        .unwrap();
+        }))?;
 
         // Alloc stats can be computed from page counts and pageSize.
         stats.branch_alloc = (stats.branch_page_n + stats.branch_overflow_n) * page_size;
@@ -573,7 +596,7 @@ impl Bucket {
 
         // Add the stats for all sub-buckets
         stats += sub_stats;
-        stats
+        Ok(stats)
     }
 
     /// Iterates over every page in a bucket, including inline pages.

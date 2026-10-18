@@ -112,3 +112,29 @@ fn delete_missing_bucket_after_last_key() {
     root.create_bucket(b"a").unwrap();
     assert_eq!(root.delete_bucket(b"b"), Err(Error::BucketNotFound));
 }
+
+#[test]
+fn try_variants() {
+    let mut db = db_mock().build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut root = tx.create_bucket(b"root").unwrap();
+        root.put(b"key", b"value".to_vec()).unwrap();
+        root.create_bucket(b"child").unwrap();
+
+        assert_eq!(root.try_get(b"key"), Ok(Some(&b"value"[..])));
+        assert_eq!(root.try_get(b"missing"), Ok(None));
+        assert_eq!(root.try_get(b"child"), Ok(None));
+        assert!(root.try_bucket(b"child").unwrap().is_some());
+        assert!(root.try_bucket(b"missing").unwrap().is_none());
+        assert!(root.try_bucket_mut(b"child").unwrap().is_some());
+        assert_eq!(root.try_buckets(), Ok(vec![b"child".to_vec()]));
+    }
+
+    let tx = db.begin_tx().unwrap();
+    let root = tx.bucket(b"root").unwrap();
+    assert_eq!(
+        format!("{:?}", root.try_stats().unwrap()),
+        format!("{:?}", root.stats())
+    );
+}

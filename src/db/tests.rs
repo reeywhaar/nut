@@ -242,3 +242,15 @@ fn begin_rw_tx_unlocks_after_failure() {
 
     assert!(db.begin_rw_tx().is_ok());
 }
+
+#[test]
+fn try_stats_reports_lock_error() {
+    let db = db_mock().build().unwrap();
+    assert!(db.try_stats().is_ok());
+    assert!(db.try_info().is_ok());
+
+    let inner = db.0.clone();
+    let stats = inner.stats.write();
+    assert_eq!(db.try_stats().err(), Some(Error::lock("stats")));
+    drop(stats);
+}
