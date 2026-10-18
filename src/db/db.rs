@@ -482,7 +482,7 @@ impl<'a> DB {
         let mut tx = scopeguard::guard(self.begin_rw_tx()?, |tx| {
             let db_exists = tx.db().is_ok();
             if db_exists {
-                tx.__rollback().unwrap();
+                tx.rollback_inner().unwrap();
             };
         });
 
@@ -494,7 +494,7 @@ impl<'a> DB {
         }));
 
         if result.is_err() {
-            tx.__rollback()?;
+            tx.rollback_inner()?;
             return Err("Panic while update".into());
         }
 
@@ -517,7 +517,7 @@ impl<'a> DB {
         let tx = scopeguard::guard(self.begin_tx()?, |tx| {
             let db_exists = tx.db().is_ok();
             if db_exists {
-                tx.__rollback().unwrap();
+                tx.rollback_inner().unwrap();
             };
         });
 
@@ -529,7 +529,7 @@ impl<'a> DB {
         }));
 
         if result.is_err() {
-            tx.__rollback()?;
+            tx.rollback_inner()?;
             return Err("Panic while update".into());
         }
 

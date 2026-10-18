@@ -106,7 +106,7 @@ impl Bucket {
         Ok(Cursor::new(self))
     }
 
-    fn __bucket(&self, name: &[u8]) -> Option<*mut Bucket> {
+    fn bucket_ptr(&self, name: &[u8]) -> Option<*mut Bucket> {
         if let Some(b) = self.buckets.borrow_mut().get_mut(name) {
             return Some(b);
         };
@@ -140,7 +140,7 @@ impl Bucket {
     /// Retrieves a nested bucket by name.
     /// Returns None if the bucket does not exist or found item is not bucket.
     pub fn bucket(&self, key: &[u8]) -> Option<&Bucket> {
-        self.__bucket(key).map(|b| unsafe { &*b })
+        self.bucket_ptr(key).map(|b| unsafe { &*b })
     }
 
     /// Retrieves a nested mutable bucket by name.
@@ -149,7 +149,7 @@ impl Bucket {
         if !self.tx().unwrap().writable() {
             return None;
         };
-        self.__bucket(key).map(|b| unsafe { &mut *b })
+        self.bucket_ptr(key).map(|b| unsafe { &mut *b })
     }
 
     /// Helper method that re-interprets a sub-bucket value
@@ -600,10 +600,10 @@ impl Bucket {
         if let Some(ref page) = self.page {
             return handler(PageNode::from(&raw const **page).upgrade(), 0);
         }
-        self.__for_each_page_node(self.bucket.root, 0, &mut handler)
+        self.for_each_page_node_at(self.bucket.root, 0, &mut handler)
     }
 
-    fn __for_each_page_node<F>(
+    fn for_each_page_node_at<F>(
         &self,
         pgid: PGID,
         depth: isize,
@@ -624,14 +624,14 @@ impl Bucket {
                 if is_branch {
                     for i in 0..p.count as usize {
                         let elem = p.branch_page_element(i);
-                        self.__for_each_page_node(elem.pgid, depth + 1, handler)?;
+                        self.for_each_page_node_at(elem.pgid, depth + 1, handler)?;
                     }
                 }
             }
             Either::Right(n) => {
                 if !n.is_leaf() {
                     for inode in &*n.0.inodes.borrow() {
-                        self.__for_each_page_node(inode.pgid, depth + 1, handler)?;
+                        self.for_each_page_node_at(inode.pgid, depth + 1, handler)?;
                     }
                 }
             }

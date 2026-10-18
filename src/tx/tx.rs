@@ -357,14 +357,14 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
-        let result = self.__commit();
+        let result = self.commit_inner();
         if result.is_err() && self.db().is_ok() {
-            self.__rollback()?;
+            self.rollback_inner()?;
         }
         result
     }
 
-    fn __commit(&mut self) -> Result<(), Error> {
+    fn commit_inner(&mut self) -> Result<(), Error> {
         let mut db = self.db()?;
 
         {
@@ -503,11 +503,11 @@ impl Tx {
         if self.0.managed.load(Ordering::Acquire) {
             return Err(Error::TxManaged);
         };
-        self.__rollback()?;
+        self.rollback_inner()?;
         Ok(())
     }
 
-    pub(crate) fn __rollback(&self) -> Result<(), Error> {
+    pub(crate) fn rollback_inner(&self) -> Result<(), Error> {
         let db = self.db()?;
         if self.0.check.swap(false, Ordering::AcqRel) {
             let strict = db.0.check_mode.contains(CheckMode::STRICT);
@@ -537,7 +537,7 @@ impl Tx {
     pub fn check_sync(&self) -> Result<(), Error> {
         let (sender, ch) = mpsc::channel::<String>();
         let tx = self.clone();
-        let handle = thread::spawn(move || tx.__check(sender));
+        let handle = thread::spawn(move || tx.check_into(sender));
 
         let mut errs = vec![];
         for err in ch {
@@ -571,7 +571,7 @@ impl Tx {
     pub fn check(&self) -> mpsc::Receiver<String> {
         let (sender, receiver) = mpsc::channel::<String>();
         let tx = self.clone();
-        thread::spawn(move || tx.__check(sender));
+        thread::spawn(move || tx.check_into(sender));
         receiver
     }
 
@@ -595,7 +595,7 @@ impl Tx {
         Ok(freed)
     }
 
-    pub(super) fn __check(&self, ch: mpsc::Sender<String>) {
+    pub(super) fn check_into(&self, ch: mpsc::Sender<String>) {
         if let Err(e) = self.check_pages(&ch) {
             ch.send(e.to_string()).expect("Check receiver dropped");
         }
