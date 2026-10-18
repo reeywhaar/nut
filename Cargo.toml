@@ -1,6 +1,6 @@
 [package]
 name = "nut"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Vyrtsev Mikhail <reeywhaar@gmail.com>"]
 homepage = "https://github.com/Reeywhaar/nut"
 description = "Bolt DB Port in Rust"
