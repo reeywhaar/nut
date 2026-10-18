@@ -55,8 +55,19 @@ impl fmt::Display for Flags {
             Flags::LEAVES => "leaves".to_string(),
             Flags::META => "meta".to_string(),
             Flags::FREELIST => "freelist".to_string(),
-            _ => panic!("unknown flag"),
+            _ => format!("unknown({:#x})", self.bits()),
         };
         write!(f, "{d}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Flags;
+
+    #[test]
+    fn display_unknown_flags() {
+        assert_eq!(Flags::LEAVES.to_string(), "leaves");
+        assert_eq!(Flags::from_bits_retain(0x20).to_string(), "unknown(0x20)");
     }
 }
