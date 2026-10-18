@@ -165,7 +165,7 @@ impl<'a> DB {
         {
             let freelist_id = db.meta()?.freelist;
             db.mmap((freelist_id + 1) * db.0.page_size as u64)?;
-            let freelist_page = db.page(freelist_id);
+            let freelist_page = db.page(freelist_id)?;
             db.0.freelist
                 .try_write()
                 .ok_or_else(|| Error::lock("freelist"))?
@@ -668,8 +668,8 @@ impl<'a> DB {
         drop(mmap);
         drop(mmap_size);
 
-        let check0 = self.page(0).meta().and_then(|m| m.validate());
-        let check1 = self.page(1).meta().and_then(|m| m.validate());
+        let check0 = self.page(0).and_then(|p| p.meta()?.validate());
+        let check1 = self.page(1).and_then(|p| p.meta()?.validate());
 
         // Validate the meta pages. We only return an error if both meta pages fail
         // validation, since meta0 failing validation means that it wasn't saved
@@ -754,11 +754,41 @@ impl<'a> DB {
     }
 
     /// Retrieves page from mmap
-    pub(crate) fn page(&self, id: PGID) -> MappedRwLockReadGuard<'_, Page> {
-        let page_size = self.0.page_size;
-        let pos = id as usize * page_size;
+    pub(crate) fn page(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
+        let (page, len) = self.page_with_len(id)?;
+        page.check_bounds(len)?;
+        Ok(page)
+    }
+
+    pub(crate) fn page_span(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
+        Ok(self.page_with_len(id)?.0)
+    }
+
+    fn page_with_len(&self, id: PGID) -> Result<(MappedRwLockReadGuard<'_, Page>, usize), Error> {
+        let (page, available) = self.mapped_page(id)?;
+        let len = (u64::from(page.overflow) + 1) * self.0.page_size as u64;
+        if len > available {
+            return Err(format!("Page {id}: out of bounds").into());
+        }
+        Ok((page, len as usize))
+    }
+
+    pub(crate) fn page_header(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
+        Ok(self.mapped_page(id)?.0)
+    }
+
+    fn mapped_page(&self, id: PGID) -> Result<(MappedRwLockReadGuard<'_, Page>, u64), Error> {
         let mmap = self.0.mmap.read_recursive();
-        RwLockReadGuard::map(mmap, |mmap| Page::from_buf(&mmap.as_ref()[pos..]))
+        let mmap_len = mmap.len() as u64;
+        let pos = id
+            .checked_mul(self.0.page_size as u64)
+            .filter(|pos| {
+                pos.checked_add(Page::header_size() as u64)
+                    .is_some_and(|end| end <= mmap_len)
+            })
+            .ok_or_else(|| format!("Page {id}: out of bounds"))?;
+        let page = RwLockReadGuard::map(mmap, |mmap| Page::from_buf(&mmap[pos as usize..]));
+        Ok((page, mmap_len - pos))
     }
 
     fn page_in_buffer<'b>(&'a self, buf: &'b mut [u8], id: PGID) -> &'b mut Page {
@@ -769,8 +799,8 @@ impl<'a> DB {
     }
 
     pub fn meta(&self) -> Result<Meta, Error> {
-        let (page0, page1) = (self.page(0), self.page(1));
-        newest_valid_meta([&page0, &page1])
+        let pages = [self.page(0), self.page(1)];
+        newest_valid_meta(pages.iter().filter_map(|page| page.as_deref().ok()))
             .ok_or_else(|| "nut::DB.meta(): invalid meta pages".into())
     }
 
@@ -885,7 +915,7 @@ impl WeakDB {
     }
 }
 
-fn newest_valid_meta(pages: [&Page; 2]) -> Option<Meta> {
+fn newest_valid_meta<'a>(pages: impl IntoIterator<Item = &'a Page>) -> Option<Meta> {
     pages
         .into_iter()
         .filter_map(|page| page.meta().ok().filter(|meta| meta.validate().is_ok()))

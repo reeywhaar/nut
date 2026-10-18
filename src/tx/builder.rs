@@ -58,6 +58,7 @@ impl TxBuilder {
             meta: RwLock::new(meta),
             root: RwLock::new(Bucket::new(WeakTx::new())),
             pages: RwLock::new(HashMap::new()),
+            checked_pages: RwLock::new(Default::default()),
             stats: Mutex::new(Default::default()),
             commit_handlers: Mutex::new(Vec::new()),
             write_flag: 0,

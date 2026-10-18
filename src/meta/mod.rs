@@ -64,7 +64,6 @@ impl Default for Meta {
 }
 
 impl Meta {
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) const SIZE: usize = size_of::<Self>();
 
     pub fn validate(&self) -> Result<(), Error> {

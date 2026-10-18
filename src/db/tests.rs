@@ -308,3 +308,36 @@ fn meta_fails_when_both_pages_invalid() {
     );
     std::fs::remove_file(&path).unwrap();
 }
+
+#[test]
+fn corrupted_page_returns_error() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let path = {
+        let mut db = DBBuilder::new(temp_file()).build().unwrap();
+        let mut tx = db.begin_rw_tx().unwrap();
+        let _ = tx.create_bucket(b"bucket").unwrap();
+        tx.commit().unwrap();
+        drop(tx);
+        db.path().to_owned()
+    };
+    let root = DB::get_meta(&mut std::fs::File::open(&path).unwrap())
+        .unwrap()
+        .root
+        .root;
+
+    let ksize_offset = root * page_size::get() as u64 + 16 + 8;
+    let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    file.seek(SeekFrom::Start(ksize_offset)).unwrap();
+    file.write_all(&u32::MAX.to_ne_bytes()).unwrap();
+    drop(file);
+
+    let db = DBBuilder::new(&path).autoremove(true).build().unwrap();
+    let tx = db.begin_tx().unwrap();
+    assert_eq!(
+        tx.bucket(b"bucket").err(),
+        Some(Error::Unexpected(format!(
+            "Page {root}: data out of bounds"
+        )))
+    );
+}

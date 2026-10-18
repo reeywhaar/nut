@@ -59,6 +59,68 @@ impl Page {
         offset_of!(Page, ptr)
     }
 
+    pub(crate) fn check_bounds(&self, len: usize) -> Result<(), Error> {
+        let out_of_bounds = || Error::from(format!("Page {}: data out of bounds", self.id));
+        let header = Self::header_size() as u64;
+        let len = len as u64;
+        let count = u64::from(self.count);
+        if header > len {
+            return Err(out_of_bounds());
+        }
+        match self.flags {
+            Flags::LEAVES => {
+                if header + count * LeafPageElement::SIZE as u64 > len {
+                    return Err(out_of_bounds());
+                }
+                for (i, elem) in self.leaf_page_elements()?.iter().enumerate() {
+                    let offset = header + i as u64 * LeafPageElement::SIZE as u64;
+                    let end = offset
+                        + u64::from(elem.pos)
+                        + u64::from(elem.ksize)
+                        + u64::from(elem.vsize);
+                    if end > len {
+                        return Err(out_of_bounds());
+                    }
+                }
+            }
+            Flags::BRANCHES => {
+                if header + count * BranchPageElement::SIZE as u64 > len {
+                    return Err(out_of_bounds());
+                }
+                for (i, elem) in self.branch_page_elements()?.iter().enumerate() {
+                    let offset = header + i as u64 * BranchPageElement::SIZE as u64;
+                    if offset + u64::from(elem.pos) + u64::from(elem.ksize) > len {
+                        return Err(out_of_bounds());
+                    }
+                }
+            }
+            Flags::META => {
+                if header + Meta::SIZE as u64 > len {
+                    return Err(out_of_bounds());
+                }
+            }
+            Flags::FREELIST => {
+                let mut ids = count;
+                if count == 0xFFFF {
+                    if header + size_of::<PGID>() as u64 > len {
+                        return Err(out_of_bounds());
+                    }
+                    ids = unsafe { *self.get_data_ptr().cast::<PGID>() }
+                        .checked_add(1)
+                        .ok_or_else(out_of_bounds)?;
+                }
+                let end = ids
+                    .checked_mul(size_of::<PGID>() as u64)
+                    .and_then(|size| size.checked_add(header));
+                if end.is_none_or(|end| end > len) {
+                    return Err(out_of_bounds());
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub(crate) fn from_buf(buf: &[u8]) -> &Page {
         unsafe { &*buf.as_ptr().cast::<Page>() }
     }

@@ -1,6 +1,7 @@
 use super::{OwnedPage, Page, PageData, leaf_page_element::LeafPageElement};
 use crate::consts::{Flags, PGID};
 use crate::errors::Error;
+use crate::meta::Meta;
 
 #[test]
 fn new() {
@@ -119,4 +120,42 @@ fn accessors_return_errors() {
             "Page 7: element 1 out of range".to_string()
         ))
     );
+}
+
+#[test]
+fn check_bounds() {
+    let out_of_bounds = Some(Error::Unexpected("Page 3: data out of bounds".to_string()));
+    let mut page = OwnedPage::new(4096);
+    page.id = 3;
+    page.flags = Flags::LEAVES;
+    page.count = 1;
+    {
+        let elem = page.leaf_page_element_mut(0).unwrap();
+        elem.pos = 16;
+        elem.ksize = 3;
+        elem.vsize = 4;
+    }
+    assert!(page.check_bounds(4096).is_ok());
+    assert_eq!(page.check_bounds(8).err(), out_of_bounds);
+
+    page.leaf_page_element_mut(0).unwrap().vsize = 5000;
+    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+
+    page.count = 1000;
+    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+
+    page.flags = Flags::META;
+    assert!(page.check_bounds(Page::header_size() + Meta::SIZE).is_ok());
+    assert_eq!(
+        page.check_bounds(Page::header_size() + Meta::SIZE - 1)
+            .err(),
+        out_of_bounds
+    );
+
+    page.flags = Flags::FREELIST;
+    page.count = 0xFFFF;
+    unsafe { *page.get_data_mut_ptr().cast::<PGID>() = 10_000 };
+    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+    unsafe { *page.get_data_mut_ptr().cast::<PGID>() = u64::MAX };
+    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
 }

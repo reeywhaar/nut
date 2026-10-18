@@ -1,3 +1,4 @@
+use fnv::FnvHashSet;
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
@@ -42,6 +43,8 @@ pub(crate) struct TxInner {
 
     /// pages cache
     pub(crate) pages: RwLock<HashMap<PGID, OwnedPage>>,
+    /// ids of mmap pages already bounds-checked
+    pub(crate) checked_pages: RwLock<FnvHashSet<PGID>>,
 
     /// transactions statistics
     pub(crate) stats: Mutex<TxStats>,
@@ -447,7 +450,7 @@ impl Tx {
         let (freelist_size, page_size) = {
             // Free the freelist and allocate new pages for it. This will overestimate
             // the size of the freelist but not underestimate the size (which would be bad).
-            let page = db.page(freelist_pgid);
+            let page = db.page(freelist_pgid)?;
             let mut freelist =
                 db.0.freelist
                     .try_write()
@@ -553,7 +556,7 @@ impl Tx {
             let mut freelist = db.0.freelist.write();
             freelist.rollback(txid)?;
             let freelist_id = db.meta()?.freelist;
-            let freelist_page = db.page(freelist_id);
+            let freelist_page = db.page(freelist_id)?;
             freelist.reload(&freelist_page)?;
         };
         self.close()?;
@@ -829,7 +832,13 @@ impl Tx {
         }
 
         // Otherwise return directly from the mmap.
-        Ok(&raw const *self.db()?.page(id))
+        let db = self.db()?;
+        if self.0.checked_pages.read().contains(&id) {
+            return Ok(&raw const *db.page_span(id)?);
+        }
+        let page = db.page(id)?;
+        self.0.checked_pages.write().insert(id);
+        Ok(&raw const *page)
     }
 
     /// Iterates over every page within a given page and executes a function.
@@ -870,7 +879,7 @@ impl Tx {
         let db = self.db()?;
 
         // Build the page info.
-        let p = db.page(id as u64);
+        let p = db.page_header(id as u64)?;
         let mut info = PageInfo {
             id: id as isize,
             ptype: Flags::FREELIST,
