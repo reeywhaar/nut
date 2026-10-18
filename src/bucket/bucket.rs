@@ -810,15 +810,17 @@ impl Bucket {
 
     /// Attempts to balance all nodes.
     pub(crate) fn rebalance(&mut self) -> Result<(), Error> {
-        let nodes: Vec<(PGID, Node)> = self
-            .nodes
-            .borrow()
-            .iter()
-            .map(|(pgid, node)| (*pgid, node.clone()))
-            .collect();
-        for (pgid, mut node) in nodes {
-            if self.nodes.borrow().contains_key(&pgid) {
-                node.rebalance()?;
+        if self.nodes.borrow().values().any(Node::is_unbalanced) {
+            let nodes: Vec<(PGID, Node)> = self
+                .nodes
+                .borrow()
+                .iter()
+                .map(|(pgid, node)| (*pgid, node.clone()))
+                .collect();
+            for (pgid, mut node) in nodes {
+                if self.nodes.borrow().contains_key(&pgid) {
+                    node.rebalance()?;
+                }
             }
         }
         for child in self.buckets.borrow_mut().values_mut() {

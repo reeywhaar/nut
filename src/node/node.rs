@@ -56,6 +56,11 @@ impl Node {
     }
 
     #[inline]
+    pub(crate) fn is_unbalanced(&self) -> bool {
+        self.0.unbalanced.load(Ordering::Acquire)
+    }
+
+    #[inline]
     pub(crate) fn pgid(&self) -> PGID {
         *self.0.pgid.borrow()
     }
@@ -287,7 +292,6 @@ impl Node {
     /// size is below a threshold or if there are not enough keys.
     pub fn rebalance(&mut self) -> Result<(), Error> {
         {
-            let selfsize = self.size();
             if !self.0.unbalanced.load(Ordering::Acquire) {
                 return Ok(());
             }
@@ -303,7 +307,7 @@ impl Node {
                 tx.db()?.page_size() / 4
             };
 
-            if selfsize > threshold && self.0.inodes.borrow().len() > self.min_keys() as usize {
+            if self.size() > threshold && self.0.inodes.borrow().len() > self.min_keys() as usize {
                 return Ok(());
             }
 
