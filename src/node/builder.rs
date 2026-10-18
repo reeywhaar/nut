@@ -7,9 +7,8 @@ use crate::consts::PGID;
 
 use super::{Node, NodeInner, WeakNode};
 
-#[derive(Default)]
 pub(crate) struct NodeBuilder {
-    pub(crate) bucket: Option<*const Bucket>,
+    pub(crate) bucket: *const Bucket,
     pub(crate) is_leaf: bool,
     pub(crate) pgid: PGID,
     pub(crate) parent: WeakNode,
@@ -19,8 +18,11 @@ pub(crate) struct NodeBuilder {
 impl NodeBuilder {
     pub(crate) fn new(bucket: *const Bucket) -> Self {
         Self {
-            bucket: Some(bucket),
-            ..Default::default()
+            bucket,
+            is_leaf: false,
+            pgid: 0,
+            parent: WeakNode::default(),
+            children: Vec::new(),
         }
     }
 
@@ -42,13 +44,13 @@ impl NodeBuilder {
 
     #[expect(dead_code)]
     pub(crate) fn bucket(mut self, value: *const Bucket) -> Self {
-        self.bucket = Some(value);
+        self.bucket = value;
         self
     }
 
     pub(crate) fn build(self) -> Node {
         Node(Rc::new(NodeInner {
-            bucket: self.bucket.unwrap(),
+            bucket: self.bucket,
             is_leaf: AtomicBool::new(self.is_leaf),
             unbalanced: AtomicBool::new(false),
             spilled: AtomicBool::new(false),
