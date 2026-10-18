@@ -12,6 +12,7 @@ use crate::tx::{Tx, WeakTx};
 
 use super::BucketStats;
 use super::Cursor;
+use super::ElemRef;
 use super::IBucket;
 use super::PageNode;
 use super::consts::*;
@@ -35,6 +36,9 @@ pub struct Bucket {
 
     /// node cache
     pub(crate) nodes: RefCell<HashMap<PGID, Node>>,
+
+    /// reusable stack for internal cursors
+    cursor_stack: RefCell<Vec<ElemRef>>,
 
     /// Sets the threshold for filling nodes when they split. By default,
     /// the bucket will fill to 50% but it can be useful to increase this
@@ -76,6 +80,7 @@ impl Bucket {
             page: None,
             root_node: RefCell::new(None),
             nodes: RefCell::new(HashMap::new()),
+            cursor_stack: RefCell::new(Vec::new()),
             fill_percent: Self::DEFAULT_FILL_PERCENT,
         }
     }
@@ -109,13 +114,25 @@ impl Bucket {
         Ok(Cursor::new(self))
     }
 
+    fn with_cursor<'s, T>(
+        &'s self,
+        f: impl FnOnce(&mut Cursor<'s, &'s Bucket>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        self.tx()?.0.stats.lock().cursor_count += 1;
+        let mut cursor = Cursor::with_stack(self, self.cursor_stack.take());
+        let result = f(&mut cursor);
+        let mut stack = cursor.into_stack();
+        stack.clear();
+        self.cursor_stack.replace(stack);
+        result
+    }
+
     fn bucket_ptr(&self, name: &[u8]) -> Result<Option<*mut Bucket>, Error> {
         if let Some(b) = self.buckets.borrow_mut().get_mut(name) {
             return Ok(Some(&raw mut **b));
         };
         let value = {
-            let c = self.cursor()?;
-            let (key, value, flags) = c.seek_to_item(name)?.unwrap();
+            let (key, value, flags) = self.with_cursor(|c| c.seek_to_item(name))?.unwrap();
 
             // Return None if the key doesn't exist or it is not a bucket.
             if key != Some(name) || (flags & Self::FLAG) == 0 {
@@ -358,7 +375,7 @@ impl Bucket {
     /// assert_eq!(flowers.try_get(b"irises").unwrap().unwrap(), &b"Iris is a genus of species of flowering plants"[..]);
     /// ```
     pub fn try_get(&self, key: &[u8]) -> Result<Option<&[u8]>, Error> {
-        let (ckey, value, flags) = self.cursor()?.seek(key)?.unwrap();
+        let (ckey, value, flags) = self.with_cursor(|c| c.seek(key))?.unwrap();
         // let value = value.map(|v| v.to_vec());
 
         // Return nil if this is a bucket.
@@ -407,18 +424,17 @@ impl Bucket {
         }
 
         // Move cursor to correct position.
-        let mut c = self.cursor()?;
-        let item = c.seek(key)?;
+        self.with_cursor(|c| {
+            let item = c.seek(key)?;
 
-        // Return an error if there is an existing key with a bucket value.
-        if (Some(key) == item.key) && item.is_bucket() {
-            return Err(Error::IncompatibleValue);
-        }
+            // Return an error if there is an existing key with a bucket value.
+            if (Some(key) == item.key) && item.is_bucket() {
+                return Err(Error::IncompatibleValue);
+            }
 
-        // Insert into node.
-        c.node()?.put(key, key, value, 0, 0)?;
-
-        Ok(())
+            // Insert into node.
+            c.node()?.put(key, key, value, 0, 0)
+        })
     }
 
     /// Removes a key from the bucket.
@@ -445,18 +461,19 @@ impl Bucket {
         }
 
         // Move cursor to correct position.
-        let mut c = self.cursor()?;
-        let item = c.seek(key)?;
+        self.with_cursor(|c| {
+            let item = c.seek(key)?;
 
-        // Return an error if there is already existing bucket value.
-        if item.is_bucket() {
-            return Err(Error::IncompatibleValue);
-        };
+            // Return an error if there is already existing bucket value.
+            if item.is_bucket() {
+                return Err(Error::IncompatibleValue);
+            };
 
-        // Delete the node if we have a matching key.
-        c.node()?.del(key);
+            // Delete the node if we have a matching key.
+            c.node()?.del(key);
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Returns the current integer for the bucket without incrementing it.

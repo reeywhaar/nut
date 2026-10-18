@@ -29,11 +29,19 @@ pub struct Cursor<'a, B: Deref<Target = Bucket> + 'a> {
 
 impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     pub(crate) fn new(bucket: B) -> Self {
+        Self::with_stack(bucket, Vec::new())
+    }
+
+    pub(crate) fn with_stack(bucket: B, stack: Vec<ElemRef>) -> Self {
         Self {
             bucket,
-            stack: RefCell::new(Vec::new()),
+            stack: RefCell::new(stack),
             _m: std::marker::PhantomData,
         }
+    }
+
+    pub(crate) fn into_stack(self) -> Vec<ElemRef> {
+        self.stack.into_inner()
     }
 
     /// Returns reference to bucket which is cursor created from
