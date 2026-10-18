@@ -232,3 +232,16 @@ fn check_corrupted() {
         .unwrap();
     db.begin_tx().unwrap().check_sync().unwrap_err();
 }
+
+#[test]
+fn drop_while_panicking_rolls_back() {
+    let mut db = db_mock().build().unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let _ = tx.create_bucket(b"bucket").unwrap();
+        panic!("user code failed");
+    }));
+    assert!(result.is_err());
+    let tx = db.begin_tx().unwrap();
+    assert!(tx.bucket(b"bucket").is_err());
+}

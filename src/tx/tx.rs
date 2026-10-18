@@ -867,10 +867,10 @@ impl Drop for Tx {
             return;
         };
         if let Ok(_db) = self.db() {
-            if self.0.writable {
-                self.commit().unwrap();
+            if self.0.writable && !std::thread::panicking() {
+                self.commit().expect("Automatic commit failed");
             } else {
-                self.rollback().unwrap();
+                self.rollback().expect("Automatic rollback failed");
             }
         }
     }
