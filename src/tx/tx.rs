@@ -111,12 +111,13 @@ impl Tx {
 
     /// Returns a reference to the database that created the transaction.
     pub(crate) fn db(&self) -> Result<DB, Error> {
-        self.0
-            .db
-            .try_read()
-            .ok_or(Error::TxClosed)?
-            .upgrade()
-            .ok_or(Error::DatabaseGone)
+        let Some(db) = self.0.db.try_read() else {
+            return Err(Error::TxClosed);
+        };
+        let Some(db) = db.upgrade() else {
+            return Err(Error::DatabaseGone);
+        };
+        Ok(db)
     }
 
     /// Returns the transaction id.

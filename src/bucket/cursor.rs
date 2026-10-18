@@ -101,11 +101,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         if !exact && index > 0 {
             index -= 1;
         };
-        self.stack
-            .borrow_mut()
-            .last_mut()
-            .ok_or(Error::StackEmpty)?
-            .index = index;
+        top_mut(&mut self.stack.borrow_mut())?.index = index;
 
         // Recursively search to the next page.
         let pgid = n.0.inodes.borrow()[index].pgid;
@@ -134,11 +130,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         if !exact && index > 0 {
             index -= 1;
         }
-        self.stack
-            .borrow_mut()
-            .last_mut()
-            .ok_or(Error::StackEmpty)?
-            .index = index;
+        top_mut(&mut self.stack.borrow_mut())?.index = index;
 
         // Recursively search to the next page.
         let pgid = p.branch_page_element(index)?.pgid;
@@ -150,7 +142,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Searches the leaf node on the top of the stack for a key.
     fn nsearch(&self, key: &[u8]) -> Result<(), Error> {
         let mut stack = self.stack.borrow_mut();
-        let el_ref = stack.last_mut().unwrap();
+        let el_ref = top_mut(&mut stack)?;
         if let Either::Right(n) = el_ref.upgrade() {
             let index = match n
                 .0
@@ -181,7 +173,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Returns the key and value of the current leaf element.
     fn key_value(&self) -> Result<CursorItem<'a>, Error> {
         let stack = self.stack.borrow();
-        let el_ref = stack.last().ok_or(Error::StackEmpty)?;
+        let el_ref = top(&stack)?;
         CursorItem::try_from(el_ref)
     }
 
@@ -194,7 +186,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         // If the top of the stack is a leaf node then just return it.
         {
             let stack = self.stack.borrow();
-            let el = &stack.last().ok_or(Error::StackEmpty)?;
+            let el = top(&stack)?;
             if el.is_leaf() && el.el.is_right() {
                 return Ok(el.el.as_ref().right().unwrap().clone());
             }
@@ -244,7 +236,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
         self.first_leaf()?;
 
-        let is_empty = { self.stack.borrow().last().ok_or(Error::StackEmpty)?.count() == 0 };
+        let is_empty = { top(&self.stack.borrow())?.count() == 0 };
 
         if is_empty {
             self.next_leaf()?;
@@ -261,7 +253,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     pub(crate) fn first_leaf(&self) -> Result<(), Error> {
         let mut stack = self.stack.borrow_mut();
         loop {
-            let el_ref = &stack.last().ok_or(Error::StackEmpty)?;
+            let el_ref = top(&stack)?;
             if el_ref.is_leaf() {
                 break;
             };
@@ -311,7 +303,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     pub(crate) fn last_leaf(&self) -> Result<(), Error> {
         let mut stack = self.stack.borrow_mut();
         loop {
-            let el_ref = stack.last().ok_or(Error::StackEmpty)?;
+            let el_ref = top(&stack)?;
             if el_ref.is_leaf() {
                 break;
             }
@@ -374,7 +366,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
             self.first_leaf()?;
 
-            if self.stack.borrow().last().ok_or(Error::StackEmpty)?.count() == 0 {
+            if top(&self.stack.borrow())?.count() == 0 {
                 continue;
             }
 
@@ -432,7 +424,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         let mut item = self.seek_to_item(seek)?;
         let el_ref = {
             let stack = self.stack.borrow();
-            stack.last().ok_or(Error::StackEmpty)?.clone()
+            top(&stack)?.clone()
         };
 
         if el_ref.index >= el_ref.count() {
@@ -459,7 +451,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         self.search(seek, self.bucket.bucket.root)?;
         {
             let stack = self.stack.borrow();
-            let el_ref = stack.last().ok_or(Error::StackEmpty)?;
+            let el_ref = top(&stack)?;
             if el_ref.index >= el_ref.count() {
                 return Ok(CursorItem::new_null(None, None));
             }
@@ -490,4 +482,20 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
         Ok(())
     }
+}
+
+#[inline]
+fn top(stack: &[ElemRef]) -> Result<&ElemRef, Error> {
+    let Some(el_ref) = stack.last() else {
+        return Err(Error::StackEmpty);
+    };
+    Ok(el_ref)
+}
+
+#[inline]
+fn top_mut(stack: &mut [ElemRef]) -> Result<&mut ElemRef, Error> {
+    let Some(el_ref) = stack.last_mut() else {
+        return Err(Error::StackEmpty);
+    };
+    Ok(el_ref)
 }

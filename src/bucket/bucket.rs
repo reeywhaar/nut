@@ -82,7 +82,10 @@ impl Bucket {
 
     // Returns transaction
     pub fn tx(&self) -> Result<Tx, Error> {
-        self.tx.upgrade().ok_or(Error::TxGone)
+        let Some(tx) = self.tx.upgrade() else {
+            return Err(Error::TxGone);
+        };
+        Ok(tx)
     }
 
     // Returns database
