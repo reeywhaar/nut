@@ -31,7 +31,7 @@ pub struct Bucket {
     page: Option<OwnedPage>,
 
     /// materialized node for the root page
-    root_node: Option<Node>,
+    root_node: RefCell<Option<Node>>,
 
     /// node cache
     pub(crate) nodes: RefCell<HashMap<PGID, Node>>,
@@ -74,7 +74,7 @@ impl Bucket {
             tx,
             buckets: RefCell::new(HashMap::new()),
             page: None,
-            root_node: None,
+            root_node: RefCell::new(None),
             nodes: RefCell::new(HashMap::new()),
             fill_percent: Self::DEFAULT_FILL_PERCENT,
         }
@@ -96,7 +96,7 @@ impl Bucket {
     }
 
     fn root_node(&self) -> Option<Node> {
-        self.root_node.clone()
+        self.root_node.borrow().clone()
     }
 
     /// Creates a cursor associated with the bucket.
@@ -217,7 +217,7 @@ impl Bucket {
         self.buckets.borrow_mut().clear();
         self.nodes.borrow_mut().clear();
         self.page = None;
-        self.root_node = None;
+        *self.root_node.get_mut() = None;
     }
 
     /// Creates bucket
@@ -252,7 +252,8 @@ impl Bucket {
             };
 
             let mut bucket = Bucket::new(tx_clone);
-            bucket.root_node = Some(NodeBuilder::new(&raw const bucket).is_leaf(true).build());
+            *bucket.root_node.get_mut() =
+                Some(NodeBuilder::new(&raw const bucket).is_leaf(true).build());
             bucket.fill_percent = Self::DEFAULT_FILL_PERCENT;
 
             let value = bucket.write()?;
@@ -313,7 +314,7 @@ impl Bucket {
 
             // Release all bucket pages to freelist.
             child.nodes.borrow_mut().clear();
-            child.root_node = None;
+            *child.root_node.get_mut() = None;
             child.free()?;
         }
 
@@ -472,7 +473,7 @@ impl Bucket {
             return Err(Error::TxReadonly);
         }
 
-        if self.root_node.is_none() {
+        if self.root_node.borrow().is_none() {
             self.node(self.root(), WeakNode::new())?;
         }
 
@@ -487,7 +488,7 @@ impl Bucket {
             return Err(Error::TxReadonly);
         };
 
-        if self.root_node.is_none() {
+        if self.root_node.borrow().is_none() {
             let pgid = self.root();
             self.node(pgid, WeakNode::new())?;
         };
@@ -696,7 +697,7 @@ impl Bucket {
             };
 
             // Skip writing the bucket if there are no materialized nodes.
-            if child.root_node.is_none() {
+            if child.root_node.borrow().is_none() {
                 continue;
             };
 
@@ -719,17 +720,16 @@ impl Bucket {
         }
 
         // Ignore if there's not a materialized root node.
-        if self.root_node.is_none() {
+        if self.root_node.borrow().is_none() {
             return Ok(());
         }
 
         {
             // Spill nodes.
-            let mut root_node = self.root_node.clone().ok_or("Root node empty")?.root();
+            let mut root_node = self.root_node().ok_or("Root node empty")?.root();
             root_node.spill()?;
-            self.root_node = Some(root_node);
-
-            let pgid = self.root_node.as_ref().unwrap().pgid();
+            let pgid = root_node.pgid();
+            *self.root_node.get_mut() = Some(root_node);
             let txpgid = self.tx()?.pgid()?;
 
             // Update the root node for this bucket.
@@ -780,7 +780,7 @@ impl Bucket {
     fn write(&mut self) -> Result<Vec<u8>, Error> {
         // TODO: optimize this page alloc things
         // Allocate the appropriate size.
-        let n = self.root_node.as_ref().ok_or("Root node empty")?;
+        let n = self.root_node().ok_or("Root node empty")?;
         let node_size = n.size();
         let mut value = OwnedPage::new(IBucket::SIZE + node_size);
 
@@ -814,7 +814,7 @@ impl Bucket {
     }
 
     /// Creates a node from a page and associates it with a given parent.
-    pub(crate) fn node(&mut self, pgid: PGID, parent: WeakNode) -> Result<Node, Error> {
+    pub(crate) fn node(&self, pgid: PGID, parent: WeakNode) -> Result<Node, Error> {
         if !self.tx()?.writable() {
             return Err(Error::TxReadonly);
         }
@@ -826,7 +826,7 @@ impl Bucket {
         let mut node = NodeBuilder::new(self).parent(parent.clone()).build();
         match parent.upgrade() {
             None => {
-                self.root_node.replace(node.clone());
+                self.root_node.replace(Some(node.clone()));
             }
             Some(ref mut p) => {
                 p.0.children.borrow_mut().push(node.clone());
@@ -876,8 +876,8 @@ impl Bucket {
                     "Inline bucket non-zero page access: {id} != 0"
                 )));
             }
-            if let Some(ref node) = self.root_node {
-                return Ok(PageNode::from(node.clone()));
+            if let Some(node) = self.root_node() {
+                return Ok(PageNode::from(node));
             }
             return Ok(PageNode::from(
                 &raw const **self.page.as_ref().ok_or("Page empty")?,

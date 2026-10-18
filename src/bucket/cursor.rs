@@ -40,14 +40,6 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         &self.bucket
     }
 
-    /// Returns mutable reference to bucket which is cursor created from
-    pub(crate) fn bucket_mut(&mut self) -> &mut Bucket {
-        unsafe {
-            #[expect(invalid_reference_casting)]
-            &mut *((&*self.bucket) as *const Bucket as *mut Bucket)
-        }
-    }
-
     /// Recursively performs a binary search against a given page/node until it finds a given key.
     fn search(&self, key: &[u8], pgid: PGID) -> Result<(), Error> {
         let page_node = self.bucket().page_node(pgid)?;
@@ -215,7 +207,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             match el_ref.upgrade() {
                 Either::Left(p) => {
                     let id = p.id;
-                    self.bucket_mut().node(id, WeakNode::new())?
+                    self.bucket().node(id, WeakNode::new())?
                 }
                 Either::Right(n) => n.clone(),
             }
