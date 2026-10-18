@@ -787,25 +787,37 @@ impl Bucket {
         // TODO: optimize this page alloc things
         // Allocate the appropriate size.
         let n = self.root_node().ok_or("Root node empty")?;
-        let node_size = n.size();
-        let mut value = OwnedPage::new(IBucket::SIZE + node_size);
+        let size = IBucket::SIZE + n.size();
+        let align = align_of::<PGID>();
+        let mut value = vec![0u8; size + align - 1];
+        let offset = value.as_ptr().align_offset(align);
+        if offset >= align {
+            let mut page = OwnedPage::new(size);
+            self.write_into(&n, page.buf_mut())?;
+            return Ok(page.buf().to_vec());
+        }
+
+        self.write_into(&n, &mut value[offset..offset + size])?;
+        if offset > 0 {
+            value.copy_within(offset..offset + size, 0);
+        }
+        value.truncate(size);
+        Ok(value)
+    }
+
+    fn write_into(&self, n: &Node, buf: &mut [u8]) -> Result<(), Error> {
+        let (header, page_buf) = buf.split_at_mut(IBucket::SIZE);
 
         // Write a bucket header.
         unsafe {
-            value
+            header
                 .as_mut_ptr()
                 .cast::<IBucket>()
-                .write(self.bucket.clone())
+                .write_unaligned(self.bucket.clone())
         };
 
         // Convert byte slice to a fake page and write the root node.
-        {
-            let page_buf = &mut value.buf_mut()[IBucket::SIZE..];
-            let page = Page::from_buf_mut(page_buf)?;
-            n.write(page)?;
-        }
-
-        Ok(value.buf().to_vec())
+        n.write(Page::from_buf_mut(page_buf)?)
     }
 
     /// Attempts to balance all nodes.
