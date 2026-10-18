@@ -218,9 +218,9 @@ fn split() {
         .unwrap();
 
     // Split between 2 & 3.
-    let parent = n.split(100).unwrap();
+    let (nodes, parent) = n.split(100).unwrap();
 
-    assert!(parent.is_some());
+    assert_eq!(nodes.len(), 2);
     let parent = parent.unwrap();
     let pchildren = parent.0.children.borrow();
     assert_eq!(pchildren.len(), 2);
@@ -246,9 +246,10 @@ fn split_big() {
         .unwrap();
     }
 
-    let parent = n.split(4096).unwrap().unwrap();
+    let (nodes, parent) = n.split(4096).unwrap();
 
-    assert_eq!(parent.0.children.borrow().len(), 19);
+    assert_eq!(nodes.len(), 19);
+    assert_eq!(parent.unwrap().0.children.borrow().len(), 19);
 }
 
 #[test]
@@ -262,7 +263,8 @@ fn split_min_keys() {
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
         .unwrap();
 
-    let parent = n.split(20).unwrap();
+    let (nodes, parent) = n.split(20).unwrap();
+    assert_eq!(nodes.len(), 1);
     assert!(parent.is_none());
 }
 
@@ -283,6 +285,7 @@ fn split_single_page() {
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
         .unwrap();
 
-    let parent = n.split(4096).unwrap();
+    let (nodes, parent) = n.split(4096).unwrap();
+    assert_eq!(nodes.len(), 1);
     assert!(parent.is_none());
 }

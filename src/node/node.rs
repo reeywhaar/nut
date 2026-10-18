@@ -113,41 +113,31 @@ impl Node {
     /// This should only be called from the spill() function.
     ///
     /// returns None if no split occured, or parent Node otherwise
-    pub(crate) fn split(&mut self, page_size: usize) -> Result<Option<Node>, Error> {
-        // let mut parent = self.parent();
+    pub(crate) fn split(&mut self, page_size: usize) -> Result<(Vec<Node>, Option<Node>), Error> {
         let mut nodes = vec![self.clone()];
-        while let Some(n) = nodes.last().unwrap().clone().split_two(page_size)? {
-            nodes.push(n);
+        while let Some(next) = nodes[nodes.len() - 1].clone().split_two(page_size)? {
+            nodes.push(next);
         }
-
         if nodes.len() == 1 {
-            return Ok(None);
+            return Ok((nodes, None));
         }
 
-        let parent = match self.parent() {
-            Some(p) => {
-                let mut children = p.0.children.borrow_mut();
-                let index = children.iter().position(|ch| Rc::ptr_eq(&self.0, &ch.0));
-                debug_assert!(index.is_some());
-                children.remove(index.unwrap());
-                for node in nodes {
-                    *node.0.parent.borrow_mut() = WeakNode::from(&p);
-                    children.push(node);
-                }
-                drop(children);
-
-                p
-            }
+        let (parent, new_parent) = match self.parent() {
+            Some(parent) => (parent, None),
             None => {
-                let parent = NodeBuilder::new(self.0.bucket).children(nodes).build();
-                for ch in &mut *parent.0.children.borrow_mut() {
-                    *ch.0.parent.borrow_mut() = WeakNode::from(&parent);
-                }
-                parent
+                let parent = NodeBuilder::new(self.0.bucket)
+                    .children(vec![self.clone()])
+                    .build();
+                *self.0.parent.borrow_mut() = WeakNode::from(&parent);
+                (parent.clone(), Some(parent))
             }
         };
+        for node in &nodes[1..] {
+            *node.0.parent.borrow_mut() = WeakNode::from(&parent);
+            parent.0.children.borrow_mut().push(node.clone());
+        }
 
-        Ok(Some(parent))
+        Ok((nodes, new_parent))
     }
 
     /// Breaks up a node into two smaller nodes, if appropriate.
@@ -198,97 +188,83 @@ impl Node {
         }
 
         let page_size = self.bucket().ok_or("Bucket empty")?.tx()?.db()?.page_size();
-        {
-            let mut children = self.0.children.borrow_mut().clone();
-            children.sort_by(Node::cmp_by_key);
-            for child in &mut *children {
-                child.spill()?;
-            }
 
-            self.0.children.borrow_mut().clear();
-        }
-
-        let mut node_parent = None;
-
-        {
-            let mut nodes = match self.split(page_size)? {
-                None => vec![self.clone()],
-                Some(p) => {
-                    node_parent = Some(p.clone());
-                    p.0.children.borrow().clone()
-                }
+        self.0.children.borrow_mut().sort_by(Node::cmp_by_key);
+        let mut index = 0;
+        loop {
+            let child = self.0.children.borrow().get(index).cloned();
+            let Some(mut child) = child else {
+                break;
             };
+            child.spill()?;
+            index += 1;
+        }
+        self.0.children.borrow_mut().clear();
 
-            let bucket = self.bucket().ok_or("Bucket empty")?;
-            let mut tx = bucket.tx()?;
-            let db = tx.db()?;
-            let txid = tx.id()?;
+        let (nodes, new_parent) = self.split(page_size)?;
 
-            for node in &mut nodes {
-                {
-                    // Add node's page to the freelist if it's not new.
-                    let node_pgid = *node.0.pgid.borrow_mut();
-                    if node_pgid > 0 {
-                        db.0.freelist
-                            .try_write()
-                            .ok_or_else(|| Error::lock("freelist"))?
-                            .free(txid, unsafe { &*tx.page(node_pgid)? })?;
-                        *node.0.pgid.borrow_mut() = 0;
-                    }
+        let bucket = self.bucket().ok_or("Bucket empty")?;
+        let mut tx = bucket.tx()?;
+        let db = tx.db()?;
+        let txid = tx.id()?;
+
+        for node in &nodes {
+            {
+                // Add node's page to the freelist if it's not new.
+                let node_pgid = *node.0.pgid.borrow();
+                if node_pgid > 0 {
+                    db.0.freelist
+                        .try_write()
+                        .ok_or_else(|| Error::lock("freelist"))?
+                        .free(txid, unsafe { &*tx.page(node_pgid)? })?;
+                    *node.0.pgid.borrow_mut() = 0;
                 }
-
-                let page = tx.allocate((node.size() / db.page_size()) as u64 + 1)?;
-                let page = unsafe { &mut *page };
-
-                {
-                    // Write the node.
-                    let id = page.id;
-                    let txpgid = tx.pgid()?;
-                    if id >= txpgid {
-                        return Err(Error::corrupted(format!(
-                            "Pgid ({id}) above high water mark ({txpgid})"
-                        )));
-                    }
-                    *node.0.pgid.borrow_mut() = id;
-                    node.write(page)?;
-                    node.0.spilled.store(true, Ordering::Release);
-                }
-
-                // Insert into parent inodes.
-                if let Some(mut p) = node.parent() {
-                    let mut okey = node.0.key.borrow().clone();
-                    let nkey = node.0.inodes.borrow()[0].key.to_vec();
-                    if okey.is_none() {
-                        okey = Some(nkey.clone());
-                    }
-                    let pgid = *node.0.pgid.borrow();
-                    p.put(okey.unwrap().as_slice(), &nkey, vec![], pgid, 0)?;
-                    if nkey.is_empty() {
-                        return Err("Spill: zero-length node key".into());
-                    }
-                    *node.0.key.borrow_mut() = Some(nkey);
-                }
-
-                tx.0.stats.lock().spill += 1;
             }
+
+            let page = tx.allocate((node.size() / db.page_size()) as u64 + 1)?;
+            let page = unsafe { &mut *page };
+
+            {
+                // Write the node.
+                let id = page.id;
+                let txpgid = tx.pgid()?;
+                if id >= txpgid {
+                    return Err(Error::corrupted(format!(
+                        "Pgid ({id}) above high water mark ({txpgid})"
+                    )));
+                }
+                *node.0.pgid.borrow_mut() = id;
+                node.write(page)?;
+                node.0.spilled.store(true, Ordering::Release);
+            }
+
+            // Insert into parent inodes.
+            if let Some(mut p) = node.parent() {
+                let nkey = node
+                    .0
+                    .inodes
+                    .borrow()
+                    .first()
+                    .ok_or("Key empty")?
+                    .key
+                    .to_vec();
+                let okey = node.0.key.borrow().clone().unwrap_or_else(|| nkey.clone());
+                let pgid = *node.0.pgid.borrow();
+                p.put(&okey, &nkey, vec![], pgid, 0)?;
+                if nkey.is_empty() {
+                    return Err("Spill: zero-length node key".into());
+                }
+                *node.0.key.borrow_mut() = Some(nkey);
+            }
+
+            tx.0.stats.lock().spill += 1;
         }
 
         // If the root node split and created a new root then we need to spill that
-        // as well. We'll clear out the children to make sure it doesn't try to respill.
-        {
-            let spill_parent = match node_parent {
-                None => None,
-                Some(p) => {
-                    let pgid_valid = *p.0.pgid.borrow() == 0;
-                    if pgid_valid { Some(p) } else { None }
-                }
-            };
-            if let Some(parent) = spill_parent {
-                self.0.children.borrow_mut().clear();
-                // setting self as parent to hold strong reference
-                *self = parent;
-                return self.spill();
-            }
+        // as well.
+        if let Some(parent) = new_parent {
+            *self = parent;
+            return self.spill();
         }
 
         Ok(())
@@ -726,7 +702,8 @@ impl Node {
     }
 
     fn cmp_by_key(a: &Node, b: &Node) -> std::cmp::Ordering {
-        a.0.inodes.borrow()[0].key.cmp(&b.0.inodes.borrow()[0].key)
+        let (a, b) = (a.0.inodes.borrow(), b.0.inodes.borrow());
+        a.first().map(|i| &i.key).cmp(&b.first().map(|i| &i.key))
     }
 }
 
