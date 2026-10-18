@@ -4,6 +4,7 @@ use anstyle::AnsiColor;
 use clap::{Args, Parser, Subcommand};
 use hexdump::{hexdump_iter, sanitize_byte};
 use nut::{Bucket, BucketStats, DB, DBBuilder, FreedOrPageInfo, TxGuard};
+use std::collections::HashSet;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
@@ -311,7 +312,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
         .ok_or("Found none when unwrapping ids")
         .or_else(|_v| get_page_ids(&tx))?;
 
-    let mut overflowed = vec![];
+    let mut overflowed = HashSet::new();
     let pages_info = ids
         .into_iter()
         .map(|id| -> Result<_, String> {
@@ -327,7 +328,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
                     return Err(format!("Page {id}: overflow out of bounds"));
                 }
                 for i in 1..=info.overflow_count {
-                    overflowed.push(id + i);
+                    overflowed.insert(id + i);
                 }
             }
             Ok(Some(FreedOrPageInfo::PageInfo(info)))
