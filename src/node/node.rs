@@ -394,7 +394,7 @@ impl Node {
                 .remove(&target.pgid());
             target.free()?;
         } else {
-            for pgid in target.0.inodes.borrow().iter().map(|i| i.pgid) {
+            for pgid in self.0.inodes.borrow().iter().map(|i| i.pgid) {
                 if let Some(child) = self
                     .bucket()
                     .ok_or("Bucket empty")?
@@ -402,10 +402,9 @@ impl Node {
                     .borrow_mut()
                     .get_mut(&pgid)
                 {
-                    let mut parent = child.parent().ok_or("Parent empty")?;
-                    parent.remove_child(child);
+                    child.parent().ok_or("Parent empty")?.remove_child(child);
                     *child.0.parent.borrow_mut() = WeakNode::from(&target);
-                    parent.0.children.borrow_mut().push(child.clone());
+                    target.0.children.borrow_mut().push(child.clone());
                 }
             }
 
@@ -625,12 +624,12 @@ impl Node {
 
     /// Returns the index of a given child node.
     pub(super) fn child_index(&self, child: &Node) -> isize {
-        for (index, node) in self.0.inodes.borrow().iter().enumerate() {
-            if Some(&node.key) == child.0.key.borrow().as_ref() {
-                return index as isize;
-            }
-        }
-        -1
+        let key = child.0.key.borrow();
+        let key = key.as_deref().unwrap_or_default();
+        self.0
+            .inodes
+            .borrow()
+            .partition_point(|inode| inode.key.as_slice() < key) as isize
     }
 
     /// Initializes the node from a page.
