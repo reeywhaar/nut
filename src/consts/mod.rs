@@ -3,7 +3,11 @@ use std::fmt;
 use std::time::Duration;
 
 // pub(crate) const MAX_ALLOC_SIZE: usize = 0xFFFFFFF;
-pub(crate) const MAX_MAP_SIZE: u64 = 0x0FFF_FFFF;
+/// largest mmap size, same as Bolt's: 256TB on 64-bit targets, 2GB otherwise
+#[cfg(target_pointer_width = "64")]
+pub(crate) const MAX_MAP_SIZE: u64 = 0xFFFF_FFFF_FFFF;
+#[cfg(not(target_pointer_width = "64"))]
+pub(crate) const MAX_MAP_SIZE: u64 = 0x7FFF_FFFF;
 
 pub(crate) const MIN_KEYS_PER_PAGE: usize = 2;
 

@@ -664,7 +664,7 @@ impl<'a> DB {
         Ok(())
     }
 
-    fn mmap_size(&self, mut size: u64) -> Result<u64, Error> {
+    pub(super) fn mmap_size(&self, mut size: u64) -> Result<u64, Error> {
         // Double the size from 32KB until 1GB.
         for i in 15..=30 {
             if size <= 1 << i {

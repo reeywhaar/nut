@@ -1,5 +1,5 @@
 use super::{CheckMode, DBBuilder};
-use crate::consts::MAGIC;
+use crate::consts::{MAGIC, MAX_MAP_SIZE};
 use crate::test_utils::temp_file;
 
 #[expect(clippy::extra_unused_lifetimes)]
@@ -17,6 +17,25 @@ fn open() {
     assert_eq!(db.meta().unwrap().version, 2);
     assert_eq!(db.meta().unwrap().magic, MAGIC);
     assert_eq!(db.meta().unwrap().root.root, 3);
+}
+
+#[test]
+fn mmap_size() {
+    let db = db_mock().build().unwrap();
+    assert_eq!(db.mmap_size(0).unwrap(), 1 << 15);
+    assert_eq!(db.mmap_size(1 << 15).unwrap(), 1 << 15);
+    assert_eq!(db.mmap_size((1 << 15) + 1).unwrap(), 1 << 16);
+    assert_eq!(db.mmap_size(1 << 30).unwrap(), 1 << 30);
+    assert_eq!(
+        db.mmap_size((1 << 30) + 1).unwrap(),
+        u64::min(2 << 30, MAX_MAP_SIZE)
+    );
+    assert_eq!(
+        db.mmap_size((3 << 30) + 1).unwrap(),
+        u64::min(4 << 30, MAX_MAP_SIZE)
+    );
+    assert_eq!(db.mmap_size(MAX_MAP_SIZE).unwrap(), MAX_MAP_SIZE);
+    assert!(db.mmap_size(MAX_MAP_SIZE + 1).is_err());
 }
 
 #[test]
