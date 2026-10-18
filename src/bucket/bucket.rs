@@ -753,13 +753,14 @@ impl Bucket {
     }
 
     /// Attempts to balance all nodes.
-    pub(crate) fn rebalance(&mut self) {
+    pub(crate) fn rebalance(&mut self) -> Result<(), Error> {
         for node in self.nodes.borrow_mut().values_mut() {
-            node.rebalance()
+            node.rebalance()?;
         }
         for child in self.buckets.borrow_mut().values_mut() {
-            child.rebalance()
+            child.rebalance()?;
         }
+        Ok(())
     }
 
     /// Creates a node from a page and associates it with a given parent.

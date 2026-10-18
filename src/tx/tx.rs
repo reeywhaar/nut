@@ -373,7 +373,7 @@ impl Tx {
                 .root
                 .try_write()
                 .ok_or_else(|| Error::lock("bucket"))?
-                .rebalance();
+                .rebalance()?;
             let mut stats = self.0.stats.lock();
             if stats.rebalance > 0 {
                 stats.rebalance_time += SystemTime::now().duration_since(start_time)?;

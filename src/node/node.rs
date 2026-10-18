@@ -295,26 +295,26 @@ impl Node {
 
     /// Attempts to combine the node with sibling nodes if the node fill
     /// size is below a threshold or if there are not enough keys.
-    pub fn rebalance(&mut self) {
+    pub fn rebalance(&mut self) -> Result<(), Error> {
         {
             let selfsize = self.size();
             if !self.0.unbalanced.load(Ordering::Acquire) {
-                return;
+                return Ok(());
             }
 
             self.0.unbalanced.store(false, Ordering::Release);
 
             // update stats and get threshold;
             let threshold = {
-                let bucket = self.bucket_mut().unwrap();
-                let tx = bucket.tx().unwrap();
+                let bucket = self.bucket_mut().ok_or("Bucket empty")?;
+                let tx = bucket.tx()?;
 
                 tx.0.stats.lock().rebalance += 1;
-                tx.db().unwrap().page_size() / 4
+                tx.db()?.page_size() / 4
             };
 
             if selfsize > threshold && self.0.inodes.borrow().len() > self.min_keys() as usize {
-                return;
+                return Ok(());
             }
 
             if self.parent().is_none() {
@@ -322,7 +322,7 @@ impl Node {
                 if !self.is_leaf() && inodes.len() == 1 {
                     let mut child = self
                         .bucket_mut()
-                        .unwrap()
+                        .ok_or("Bucket empty")?
                         .node(inodes[0].pgid, WeakNode::from(self));
 
                     self.0.is_leaf.store(child.is_leaf(), Ordering::Release);
@@ -333,7 +333,7 @@ impl Node {
                     // Reparent all child nodes being moved.
                     {
                         let inode_pgids = inodes.iter().map(|i| i.pgid);
-                        let bucket = self.bucket_mut().unwrap();
+                        let bucket = self.bucket_mut().ok_or("Bucket empty")?;
                         for pgid in inode_pgids {
                             if let Some(child) = bucket.nodes.borrow_mut().get_mut(&pgid) {
                                 *child.0.parent.borrow_mut() = WeakNode::from(self);
@@ -343,54 +343,57 @@ impl Node {
 
                     *child.0.parent.borrow_mut() = WeakNode::new();
                     self.bucket_mut()
-                        .unwrap()
+                        .ok_or("Bucket empty")?
                         .nodes
                         .borrow_mut()
                         .remove(&child.0.pgid.borrow());
-                    child.free().unwrap();
+                    child.free()?;
                 }
 
-                return;
+                return Ok(());
             }
         }
 
         // If node has no keys then just remove it.
         if self.num_children() == 0 {
-            let key = self.0.key.borrow().clone().unwrap();
+            let key = self.0.key.borrow().clone().ok_or("Key empty")?;
             let pgid = *self.0.pgid.borrow();
-            let mut parent = self.parent().unwrap();
+            let mut parent = self.parent().ok_or("Parent empty")?;
             parent.del(&key);
             parent.remove_child(self);
-            self.bucket_mut().unwrap().nodes.borrow_mut().remove(&pgid);
-            self.free().unwrap();
-            parent.rebalance();
-            return;
+            self.bucket_mut()
+                .ok_or("Bucket empty")?
+                .nodes
+                .borrow_mut()
+                .remove(&pgid);
+            self.free()?;
+            parent.rebalance()?;
+            return Ok(());
         }
 
-        assert!(
-            self.parent().unwrap().num_children() > 1,
-            "parent must have at least 2 children"
-        );
+        if self.parent().ok_or("Parent empty")?.num_children() <= 1 {
+            return Err("Parent must have at least 2 children".into());
+        }
 
         let (use_next_sibling, mut target) = {
-            let use_next_sibling = self.parent().unwrap().child_index(self) == 0;
+            let use_next_sibling = self.parent().ok_or("Parent empty")?.child_index(self) == 0;
             let target = if use_next_sibling {
-                self.next_sibling().unwrap()
+                self.next_sibling().ok_or("Sibling empty")?
             } else {
-                self.prev_sibling().unwrap()
+                self.prev_sibling().ok_or("Sibling empty")?
             };
             (use_next_sibling, target)
         };
 
         if use_next_sibling {
-            let bucket = self.bucket_mut().unwrap();
+            let bucket = self.bucket_mut().ok_or("Bucket empty")?;
             for pgid in target.0.inodes.borrow().iter().map(|i| i.pgid) {
                 if let Some(child) = bucket.nodes.borrow_mut().get_mut(&pgid) {
-                    child.parent().unwrap().remove_child(child);
+                    child.parent().ok_or("Parent empty")?.remove_child(child);
                     *child.0.parent.borrow_mut() = WeakNode::from(self);
                     child
                         .parent()
-                        .unwrap()
+                        .ok_or("Parent empty")?
                         .0
                         .children
                         .borrow_mut()
@@ -403,20 +406,26 @@ impl Node {
                 .borrow_mut()
                 .append(&mut *target.0.inodes.borrow_mut());
             {
-                let mut parent = self.parent().unwrap();
-                parent.del(target.0.key.borrow().as_ref().unwrap());
+                let mut parent = self.parent().ok_or("Parent empty")?;
+                parent.del(target.0.key.borrow().as_ref().ok_or("Key empty")?);
                 parent.remove_child(&target);
             }
             self.bucket_mut()
-                .unwrap()
+                .ok_or("Bucket empty")?
                 .nodes
                 .borrow_mut()
                 .remove(&target.pgid());
-            target.free().unwrap();
+            target.free()?;
         } else {
             for pgid in target.0.inodes.borrow().iter().map(|i| i.pgid) {
-                if let Some(child) = self.bucket_mut().unwrap().nodes.borrow_mut().get_mut(&pgid) {
-                    let mut parent = child.parent().unwrap();
+                if let Some(child) = self
+                    .bucket_mut()
+                    .ok_or("Bucket empty")?
+                    .nodes
+                    .borrow_mut()
+                    .get_mut(&pgid)
+                {
+                    let mut parent = child.parent().ok_or("Parent empty")?;
                     parent.remove_child(child);
                     *child.0.parent.borrow_mut() = WeakNode::from(&target);
                     parent.0.children.borrow_mut().push(child.clone());
@@ -429,19 +438,19 @@ impl Node {
                 .borrow_mut()
                 .append(&mut *self.0.inodes.borrow_mut());
             {
-                let mut parent = self.parent().unwrap();
-                parent.del(self.0.key.borrow().as_ref().unwrap());
+                let mut parent = self.parent().ok_or("Parent empty")?;
+                parent.del(self.0.key.borrow().as_ref().ok_or("Key empty")?);
                 parent.remove_child(self);
             }
             self.bucket_mut()
-                .unwrap()
+                .ok_or("Bucket empty")?
                 .nodes
                 .borrow_mut()
                 .remove(&self.pgid());
-            self.free().unwrap();
+            self.free()?;
         }
 
-        self.parent().unwrap().rebalance();
+        self.parent().ok_or("Parent empty")?.rebalance()
     }
 
     /// Removes a node from the list of in-memory children.
