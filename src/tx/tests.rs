@@ -1,6 +1,6 @@
 use super::{Tx, TxBuilder};
-use crate::db::DBBuilder;
 use crate::db::tests::db_mock;
+use crate::db::{CheckMode, DBBuilder};
 use crate::errors::Error;
 use fnv::FnvHasher;
 use std::hash::Hasher;
@@ -244,4 +244,36 @@ fn drop_while_panicking_rolls_back() {
     assert!(result.is_err());
     let tx = db.begin_tx().unwrap();
     assert!(tx.bucket(b"bucket").is_err());
+}
+
+#[test]
+fn failed_commit_rolls_back_and_closes() {
+    let mut db = db_mock().checkmode(CheckMode::NO).build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let _ = tx.create_bucket(b"bucket").unwrap();
+
+        let inner = tx.0.clone();
+        let meta = inner.meta.read();
+        assert_eq!(tx.commit(), Err(Error::lock("meta")));
+        drop(meta);
+        drop(inner);
+
+        assert!(tx.commit().is_err());
+    }
+    let tx = db.begin_rw_tx().unwrap();
+    assert!(tx.bucket(b"bucket").is_err());
+}
+
+#[test]
+fn check_reports_errors_instead_of_panicking() {
+    let db = db_mock().build().unwrap();
+    let tx = db.begin_tx().unwrap();
+
+    let inner = tx.0.clone();
+    let root = inner.root.write();
+    let errors: Vec<String> = tx.check().iter().collect();
+    drop(root);
+
+    assert_eq!(errors, vec!["Lock failed: bucket".to_string()]);
 }

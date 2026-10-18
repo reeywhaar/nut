@@ -229,3 +229,16 @@ fn batch_push_after_run() {
     let (call, _receiver) = batch_call(|_| Ok(()));
     assert!(batch.push(call).is_err());
 }
+
+#[test]
+fn begin_rw_tx_unlocks_after_failure() {
+    let mut db = db_mock().build().unwrap();
+
+    let inner = db.0.clone();
+    let freelist = inner.freelist.read();
+    assert!(matches!(db.begin_rw_tx(), Err(Error::LockError(_))));
+    drop(freelist);
+    drop(inner);
+
+    assert!(db.begin_rw_tx().is_ok());
+}
