@@ -107,6 +107,7 @@ impl<'a> DB {
             }
             page.meta()?.page_size as usize
         };
+        let page_size = check_page_size(page_size)?;
 
         let minimal_file_size = page_size as u64 * 4;
         if options.read_only {
@@ -195,12 +196,12 @@ impl<'a> DB {
             .map_err(|e| format!("Can't seek file: {e}"))?;
         file.read_exact(&mut buf)
             .map_err(|e| format!("Can't read file to buffer: {e}"))?;
-        let magic: u32 = unsafe { *(&raw const buf[0]).cast::<u32>() };
+        let magic = u32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]);
         if magic != MAGIC {
             return Err("Incorrect header".to_string());
         };
-        let page_size: u32 = unsafe { *(&raw const buf[8]).cast::<u32>() };
-        let page_size = page_size as usize;
+        let page_size =
+            check_page_size(u32::from_ne_bytes([buf[8], buf[9], buf[10], buf[11]]) as usize)?;
         file.seek(SeekFrom::Start(0))
             .map_err(|e| format!("Can't seek file: {e}"))?;
         let mut metabuf = vec![0u8; page_size * 2];
@@ -927,4 +928,11 @@ fn newest_valid_meta<'a>(pages: impl IntoIterator<Item = &'a Page>) -> Option<Me
             }
         })
         .cloned()
+}
+
+fn check_page_size(page_size: usize) -> Result<usize, String> {
+    if page_size < Page::header_size() + Meta::SIZE {
+        return Err(format!("Invalid page size: {page_size}"));
+    }
+    Ok(page_size)
 }

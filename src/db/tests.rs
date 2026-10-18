@@ -341,3 +341,31 @@ fn corrupted_page_returns_error() {
         )))
     );
 }
+
+#[test]
+fn invalid_page_size_is_rejected() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let path = {
+        let db = DBBuilder::new(temp_file()).build().unwrap();
+        db.path().to_owned()
+    };
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .unwrap();
+    file.seek(SeekFrom::Start(24)).unwrap();
+    file.write_all(&8u32.to_ne_bytes()).unwrap();
+
+    assert_eq!(
+        DB::get_meta(&mut file).err(),
+        Some("Invalid page size: 8".to_string())
+    );
+    drop(file);
+    assert_eq!(
+        DBBuilder::new(&path).build().err(),
+        Some(Error::Unexpected("Invalid page size: 8".to_string()))
+    );
+    std::fs::remove_file(&path).unwrap();
+}
