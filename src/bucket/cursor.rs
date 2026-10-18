@@ -7,6 +7,7 @@ use crate::consts::{Flags, PGID};
 use crate::errors::Error;
 use crate::node::{Node, WeakNode};
 use crate::page::Page;
+use crate::utils::try_binary_search;
 
 use super::CursorItem;
 use super::ElemRef;
@@ -114,14 +115,16 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     }
 
     fn search_page(&self, key: &[u8], p: &Page) -> Result<(), Error> {
-        let inodes = p.branch_page_elements()?;
-        let (exact, mut index) = match inodes.binary_search_by(|inode| inode.key().cmp(key)) {
+        let elems = p.branch_page_elements()?;
+        let count = elems.len();
+        let (exact, mut index) = match try_binary_search(count, |i| {
+            p.branch_key_of(i, &elems[i]).map(|k| k.cmp(key))
+        })? {
             Ok(mut v) => {
-                for (i, inode) in inodes.iter().enumerate().skip(v) {
-                    match inode.key().cmp(key) {
-                        std::cmp::Ordering::Greater => break,
-                        std::cmp::Ordering::Less => break,
+                for (i, elem) in elems.iter().enumerate().skip(v) {
+                    match p.branch_key_of(i, elem)?.cmp(key) {
                         std::cmp::Ordering::Equal => v = i,
+                        _ => break,
                     };
                 }
                 (true, v)
@@ -138,12 +141,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             .index = index;
 
         // Recursively search to the next page.
-        let pgid = inodes
-            .get(index)
-            .ok_or_else(|| {
-                Error::corrupted(format!("Page {}: element {index} out of range", p.id))
-            })?
-            .pgid;
+        let pgid = p.branch_page_element(index)?.pgid;
         self.search(key, pgid)?;
 
         Ok(())
@@ -169,10 +167,11 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
         // If we have a page then search its leaf elements.
         let page = el_ref.el.upgrade().left().ok_or("Left empty")?;
-        let inodes = page.leaf_page_elements()?;
-        let index = match inodes.binary_search_by(|inode| inode.key().cmp(key)) {
-            Ok(v) => v,
-            Err(v) => v,
+        let elems = page.leaf_page_elements()?;
+        let index = match try_binary_search(elems.len(), |i| {
+            page.leaf_key_of(i, &elems[i]).map(|k| k.cmp(key))
+        })? {
+            Ok(v) | Err(v) => v,
         };
         el_ref.index = index;
 

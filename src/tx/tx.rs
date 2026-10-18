@@ -1,4 +1,3 @@
-use fnv::FnvHashSet;
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
@@ -43,8 +42,6 @@ pub(crate) struct TxInner {
 
     /// pages cache
     pub(crate) pages: RwLock<HashMap<PGID, OwnedPage>>,
-    /// ids of mmap pages already bounds-checked
-    pub(crate) checked_pages: RwLock<FnvHashSet<PGID>>,
 
     /// transactions statistics
     pub(crate) stats: Mutex<TxStats>,
@@ -840,13 +837,7 @@ impl Tx {
         }
 
         // Otherwise return directly from the mmap.
-        let db = self.db()?;
-        if self.0.checked_pages.read().contains(&id) {
-            return Ok(&raw const *db.page_span(id)?);
-        }
-        let page = db.page(id)?;
-        self.0.checked_pages.write().insert(id);
-        Ok(&raw const *page)
+        Ok(&raw const *self.db()?.page(id)?)
     }
 
     /// Iterates over every page within a given page and executes a function.

@@ -55,8 +55,8 @@ impl<'a> TryFrom<&ElemRef> for CursorItem<'a> {
                 Either::Left(p) => {
                     let elem = p.leaf_page_element(el_ref.index)?;
                     Self::new(
-                        Some(&*(elem.key() as *const [u8])),
-                        Some(&*(elem.value() as *const [u8])),
+                        Some(&*(p.leaf_key_of(el_ref.index, elem)? as *const [u8])),
+                        Some(&*(p.leaf_value_of(el_ref.index, elem)? as *const [u8])),
                         elem.flags,
                     )
                 }

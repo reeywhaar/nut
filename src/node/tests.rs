@@ -46,9 +46,7 @@ fn read_page() {
         page
     };
     {
-        let nodes = unsafe {
-            std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
-        };
+        let nodes = page.leaf_page_elements_mut().unwrap();
         nodes[0] = LeafPageElement {
             flags: 0,
             pos: 32,
@@ -61,12 +59,11 @@ fn read_page() {
             ksize: 10,
             vsize: 3,
         };
-
-        let data =
-            unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 1024) };
-        data[..7].copy_from_slice(b"barfooz");
-        data[7..7 + 13].copy_from_slice(b"helloworldbye");
     }
+    page.slice_mut(32, 7).unwrap().copy_from_slice(b"barfooz");
+    page.slice_mut(39, 13)
+        .unwrap()
+        .copy_from_slice(b"helloworldbye");
 
     assert!(
         size_of::<LeafPageElement>() == 16,
@@ -128,9 +125,7 @@ fn write_page() {
     };
     n.write(&mut page).unwrap();
 
-    let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
-    };
+    let nodes = page.leaf_page_elements().unwrap();
     assert_eq!(nodes[0].ksize, 4);
     assert_eq!(nodes[0].vsize, 7);
     assert_eq!(nodes[0].pos, 48);

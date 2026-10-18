@@ -106,7 +106,7 @@ fn read() {
         page
     };
     let ids: &[PGID] = &[23, 50];
-    page.copy_data_from(PageData::Freelist(ids));
+    page.copy_data_from(PageData::Freelist(ids)).unwrap();
 
     // Deserialize page into a freelist.
     let mut f = FreeList::default();

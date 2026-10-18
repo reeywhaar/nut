@@ -162,8 +162,16 @@ fn open_bucket_checks_value() {
     for field in [0u32, 16, 1000, 0] {
         value.extend(field.to_ne_bytes());
     }
+    let child = bucket.open_bucket(value).unwrap();
     assert_eq!(
-        bucket.open_bucket(value).err(),
+        child
+            .page_node(0)
+            .unwrap()
+            .upgrade()
+            .left()
+            .unwrap()
+            .leaf_key(0)
+            .err(),
         Some(Error::CheckFail(vec![
             "Page 0: data out of bounds".to_string()
         ]))

@@ -204,10 +204,7 @@ impl Bucket {
                 vec
             };
 
-            let len = data.len();
-            let p = OwnedPage::from_vec(data);
-            p.check_bounds(len)?;
-            child.page = Some(p);
+            child.page = Some(OwnedPage::from_vec(data));
         }
 
         Ok(child)
@@ -567,7 +564,8 @@ impl Bucket {
                             if (e.flags & Self::FLAG) != 0 {
                                 // For any bucket element, open the element value
                                 // and recursively call Stats on the contained bucket.
-                                sub_stats += self.open_bucket(e.value().to_vec())?.try_stats()?;
+                                sub_stats +=
+                                    self.open_bucket(p.leaf_value(i)?.to_vec())?.try_stats()?;
                             };
                         }
                     }
@@ -795,7 +793,7 @@ impl Bucket {
         // Convert byte slice to a fake page and write the root node.
         {
             let page_buf = &mut value.buf_mut()[IBucket::SIZE..];
-            let page = Page::from_buf_mut(page_buf);
+            let page = Page::from_buf_mut(page_buf)?;
             n.write(page)?;
         }
 

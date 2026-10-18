@@ -94,7 +94,7 @@ impl Meta {
         p.id = self.txid % 2;
         // Calculate the checksum.
         self.checksum = self.sum64();
-        p.copy_data_from(PageData::Meta(self));
+        p.copy_data_from(PageData::Meta(self))?;
 
         Ok(())
     }

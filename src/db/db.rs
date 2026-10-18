@@ -205,8 +205,8 @@ impl<'a> DB {
         file.read_exact(metabuf.buf_mut())
             .map_err(|e| format!("Can't read file to buffer: {e}"))?;
 
-        let metap0 = Page::from_buf(&metabuf.buf()[..page_size]);
-        let metap1 = Page::from_buf(&metabuf.buf()[page_size..]);
+        let metap0 = Page::from_buf(&metabuf.buf()[..page_size]).map_err(String::from)?;
+        let metap1 = Page::from_buf(&metabuf.buf()[page_size..]).map_err(String::from)?;
 
         newest_valid_meta([metap0, metap1]).ok_or_else(|| "Invalid meta".to_string())
     }
@@ -280,7 +280,7 @@ impl<'a> DB {
     pub(super) fn init(&mut self) -> Result<(), Error> {
         let mut buf = OwnedPage::new(self.0.page_size * 4);
         for i in 0..=1 {
-            let p = self.page_in_buffer(buf.buf_mut(), i);
+            let p = self.page_in_buffer(buf.buf_mut(), i)?;
             p.id = i;
             p.flags = Flags::META;
             let m = p.meta_mut()?;
@@ -298,11 +298,11 @@ impl<'a> DB {
             m.checksum = m.sum64();
         }
 
-        let p = self.page_in_buffer(buf.buf_mut(), 2);
+        let p = self.page_in_buffer(buf.buf_mut(), 2)?;
         p.id = 2;
         p.flags = Flags::FREELIST;
 
-        let p = self.page_in_buffer(buf.buf_mut(), 3);
+        let p = self.page_in_buffer(buf.buf_mut(), 3)?;
         p.id = 3;
         p.flags = Flags::LEAVES;
 
@@ -753,47 +753,53 @@ impl<'a> DB {
 
     /// Retrieves page from mmap
     pub(crate) fn page(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
-        let (page, len) = self.page_with_len(id)?;
-        page.check_bounds(len)?;
-        Ok(page)
-    }
-
-    pub(crate) fn page_span(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
-        Ok(self.page_with_len(id)?.0)
-    }
-
-    fn page_with_len(&self, id: PGID) -> Result<(MappedRwLockReadGuard<'_, Page>, usize), Error> {
-        let (page, available) = self.mapped_page(id)?;
-        let len = (u64::from(page.overflow) + 1) * self.0.page_size as u64;
-        if len > available {
-            return Err(Error::corrupted(format!("Page {id}: out of bounds")));
-        }
-        Ok((page, len as usize))
+        self.mapped_page(id, true)
     }
 
     pub(crate) fn page_header(&self, id: PGID) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
-        Ok(self.mapped_page(id)?.0)
+        self.mapped_page(id, false)
     }
 
-    fn mapped_page(&self, id: PGID) -> Result<(MappedRwLockReadGuard<'_, Page>, u64), Error> {
+    fn mapped_page(
+        &self,
+        id: PGID,
+        with_data: bool,
+    ) -> Result<MappedRwLockReadGuard<'_, Page>, Error> {
+        let out_of_bounds = || Error::corrupted(format!("Page {id}: out of bounds"));
         let mmap = self.0.mmap.read_recursive();
-        let mmap_len = mmap.len() as u64;
+        let page_size = self.0.page_size as u64;
         let pos = id
-            .checked_mul(self.0.page_size as u64)
-            .filter(|pos| {
-                pos.checked_add(Page::header_size() as u64)
-                    .is_some_and(|end| end <= mmap_len)
-            })
-            .ok_or_else(|| Error::corrupted(format!("Page {id}: out of bounds")))?;
-        let page = RwLockReadGuard::map(mmap, |mmap| Page::from_buf(&mmap[pos as usize..]));
-        Ok((page, mmap_len - pos))
+            .checked_mul(page_size)
+            .and_then(|pos| usize::try_from(pos).ok())
+            .ok_or_else(out_of_bounds)?;
+        let len = {
+            let rest = mmap.get(pos..).ok_or_else(out_of_bounds)?;
+            let header = Page::from_buf(rest).map_err(|_| out_of_bounds())?;
+            let len = if with_data {
+                usize::try_from((u64::from(header.overflow) + 1) * page_size)
+                    .map_err(|_| out_of_bounds())?
+            } else {
+                Page::header_size()
+            };
+            if len > rest.len() {
+                return Err(out_of_bounds());
+            }
+            len
+        };
+        RwLockReadGuard::try_map(mmap, |mmap| {
+            mmap.get(pos..pos + len)
+                .and_then(|buf| Page::from_buf(buf).ok())
+        })
+        .map_err(|_| out_of_bounds())
     }
 
-    fn page_in_buffer<'b>(&'a self, buf: &'b mut [u8], id: PGID) -> &'b mut Page {
+    fn page_in_buffer<'b>(&'a self, buf: &'b mut [u8], id: PGID) -> Result<&'b mut Page, Error> {
         let page_size = self.0.page_size;
         let pos = id as usize * page_size;
-        let endpos = pos + page_size;
-        Page::from_buf_mut(&mut buf[pos..endpos])
+        let buf = buf
+            .get_mut(pos..pos + page_size)
+            .ok_or("Page buffer too small")?;
+        Page::from_buf_mut(buf)
     }
 
     pub fn meta(&self) -> Result<Meta, Error> {
@@ -927,7 +933,7 @@ fn newest_valid_meta<'a>(pages: impl IntoIterator<Item = &'a Page>) -> Option<Me
 }
 
 fn check_page_size(page_size: usize) -> Result<usize, String> {
-    if page_size < Page::header_size() + Meta::SIZE || !page_size.is_multiple_of(align_of::<Page>())
+    if page_size < Page::header_size() + Meta::SIZE || !page_size.is_multiple_of(align_of::<PGID>())
     {
         return Err(format!("Invalid page size: {page_size}"));
     }

@@ -5,8 +5,6 @@ pub mod tests;
 
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
-use std::marker::PhantomData;
-use std::mem::offset_of;
 use std::ops::{Deref, DerefMut};
 
 mod branch_page_element;
@@ -38,8 +36,8 @@ pub(crate) struct Page {
     /// span of the page.
     /// 0 means that page allocated in one page_size block, 1 — two and so on
     pub overflow: PageSpan,
-    /// pointer to data, not used as actual u8
-    ptr: PhantomData<u8>,
+    /// page data following the header
+    data: [u8],
 }
 
 impl fmt::Debug for Page {
@@ -49,161 +47,102 @@ impl fmt::Debug for Page {
             .field("flags", &self.flags)
             .field("count", &self.count)
             .field("overflow", &self.overflow)
-            .field("ptr", &(&raw const self.ptr))
+            .field("data_len", &self.data.len())
             .finish()
     }
 }
 
 impl Page {
-    pub(crate) fn header_size() -> usize {
-        offset_of!(Page, ptr)
+    pub(crate) const fn header_size() -> usize {
+        size_of::<PGID>() + size_of::<Flags>() + size_of::<u16>() + size_of::<PageSpan>()
     }
 
-    pub(crate) fn check_bounds(&self, len: usize) -> Result<(), Error> {
-        let out_of_bounds = || Error::corrupted(format!("Page {}: data out of bounds", self.id));
-        let header = Self::header_size() as u64;
-        let len = len as u64;
-        let count = u64::from(self.count);
-        if header > len {
-            return Err(out_of_bounds());
+    pub(crate) fn from_buf(buf: &[u8]) -> Result<&Page, Error> {
+        let len = buf
+            .len()
+            .checked_sub(Self::header_size())
+            .ok_or_else(|| Error::corrupted("Page buffer too small"))?;
+        debug_assert!(buf.as_ptr().cast::<u64>().is_aligned());
+        Ok(unsafe { &*(std::ptr::slice_from_raw_parts(buf.as_ptr(), len) as *const Page) })
+    }
+
+    pub(crate) fn from_buf_mut(buf: &mut [u8]) -> Result<&mut Page, Error> {
+        let len = buf
+            .len()
+            .checked_sub(Self::header_size())
+            .ok_or_else(|| Error::corrupted("Page buffer too small"))?;
+        debug_assert!(buf.as_ptr().cast::<u64>().is_aligned());
+        Ok(unsafe {
+            &mut *(std::ptr::slice_from_raw_parts_mut(buf.as_mut_ptr(), len) as *mut Page)
+        })
+    }
+
+    fn out_of_bounds(&self) -> Error {
+        Error::corrupted(format!("Page {}: data out of bounds", self.id))
+    }
+
+    fn elements<T>(&self, count: usize) -> Result<&[T], Error> {
+        if count
+            .checked_mul(size_of::<T>())
+            .is_none_or(|size| size > self.data.len())
+        {
+            return Err(self.out_of_bounds());
         }
-        match self.flags {
-            Flags::LEAVES => {
-                if header + count * LeafPageElement::SIZE as u64 > len {
-                    return Err(out_of_bounds());
-                }
-                for (i, elem) in self.leaf_page_elements()?.iter().enumerate() {
-                    let offset = header + i as u64 * LeafPageElement::SIZE as u64;
-                    let end = offset
-                        + u64::from(elem.pos)
-                        + u64::from(elem.ksize)
-                        + u64::from(elem.vsize);
-                    if end > len {
-                        return Err(out_of_bounds());
-                    }
-                }
-            }
-            Flags::BRANCHES => {
-                if header + count * BranchPageElement::SIZE as u64 > len {
-                    return Err(out_of_bounds());
-                }
-                for (i, elem) in self.branch_page_elements()?.iter().enumerate() {
-                    let offset = header + i as u64 * BranchPageElement::SIZE as u64;
-                    if offset + u64::from(elem.pos) + u64::from(elem.ksize) > len {
-                        return Err(out_of_bounds());
-                    }
-                }
-            }
-            Flags::META => {
-                if header + Meta::SIZE as u64 > len {
-                    return Err(out_of_bounds());
-                }
-            }
-            Flags::FREELIST => {
-                let mut ids = count;
-                if count == 0xFFFF {
-                    if header + size_of::<PGID>() as u64 > len {
-                        return Err(out_of_bounds());
-                    }
-                    ids = unsafe { *self.get_data_ptr().cast::<PGID>() }
-                        .checked_add(1)
-                        .ok_or_else(out_of_bounds)?;
-                }
-                let end = ids
-                    .checked_mul(size_of::<PGID>() as u64)
-                    .and_then(|size| size.checked_add(header));
-                if end.is_none_or(|end| end > len) {
-                    return Err(out_of_bounds());
-                }
-            }
-            _ => {}
+        Ok(unsafe { std::slice::from_raw_parts(self.data.as_ptr().cast::<T>(), count) })
+    }
+
+    fn elements_mut<T>(&mut self, count: usize) -> Result<&mut [T], Error> {
+        if count
+            .checked_mul(size_of::<T>())
+            .is_none_or(|size| size > self.data.len())
+        {
+            return Err(self.out_of_bounds());
         }
-        Ok(())
+        Ok(unsafe { std::slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<T>(), count) })
     }
 
-    pub(crate) fn from_buf(buf: &[u8]) -> &Page {
-        unsafe { &*buf.as_ptr().cast::<Page>() }
+    fn element_data(&self, elem_offset: usize, pos: u32, len: u32) -> Result<&[u8], Error> {
+        elem_offset
+            .checked_add(pos as usize)
+            .and_then(|start| Some(start..start.checked_add(len as usize)?))
+            .and_then(|range| self.data.get(range))
+            .ok_or_else(|| self.out_of_bounds())
     }
 
-    pub(crate) fn from_buf_mut(buf: &mut [u8]) -> &mut Page {
-        unsafe { &mut *buf.as_mut_ptr().cast::<Page>() }
+    pub(crate) fn slice_mut(&mut self, start: usize, len: usize) -> Result<&mut [u8], Error> {
+        let id = self.id;
+        start
+            .checked_add(len)
+            .and_then(|end| self.data.get_mut(start..end))
+            .ok_or_else(|| Error::corrupted(format!("Page {id}: data out of bounds")))
     }
 
-    /// Returns pointer to page structure
-    #[inline]
-    pub(crate) fn get_data_ptr(&self) -> *const u8 {
-        (&raw const self.ptr).cast::<u8>()
-    }
-
-    /// Returns pointer to page structure
-    #[inline]
-    pub(crate) fn get_data_mut_ptr(&mut self) -> *mut u8 {
-        (&raw mut self.ptr).cast::<u8>()
+    fn freelist_len(&self) -> Result<usize, Error> {
+        let count = self.count as usize;
+        if count != 0xFFFF {
+            return Ok(count);
+        }
+        let first = self.elements::<PGID>(1)?[0];
+        usize::try_from(first)
+            .ok()
+            .and_then(|len| len.checked_add(1))
+            .ok_or_else(|| self.out_of_bounds())
     }
 
     pub(crate) fn data(&self) -> Result<PageData<'_>, Error> {
         let count = self.count as usize;
-        unsafe {
-            Ok(match self.flags {
-                Flags::BRANCHES => PageData::Branches(std::slice::from_raw_parts(
-                    self.get_data_ptr().cast::<BranchPageElement>(),
-                    count,
-                )),
-                Flags::LEAVES => PageData::Leaves(std::slice::from_raw_parts(
-                    self.get_data_ptr().cast::<LeafPageElement>(),
-                    count,
-                )),
-                Flags::META => PageData::Meta(&*self.get_data_ptr().cast::<Meta>()),
-                Flags::FREELIST => {
-                    let ptr = self.get_data_ptr().cast::<PGID>();
-                    let len = if count == 0xFFFF {
-                        1 + *ptr as usize
-                    } else {
-                        count
-                    };
-                    PageData::Freelist(std::slice::from_raw_parts(ptr, len))
-                }
-                _ => {
-                    return Err(Error::corrupted(format!(
-                        "Unknown page type: {}",
-                        self.flags
-                    )));
-                }
-            })
-        }
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn data_mut(&mut self) -> Result<PageData<'_>, Error> {
-        let count = self.count as usize;
-        unsafe {
-            Ok(match self.flags {
-                Flags::BRANCHES => PageData::Branches(std::slice::from_raw_parts(
-                    self.get_data_mut_ptr().cast::<BranchPageElement>(),
-                    count,
-                )),
-                Flags::LEAVES => PageData::Leaves(std::slice::from_raw_parts(
-                    self.get_data_mut_ptr().cast::<LeafPageElement>(),
-                    count,
-                )),
-                Flags::META => PageData::Meta(&*self.get_data_mut_ptr().cast::<Meta>()),
-                Flags::FREELIST => {
-                    let ptr = self.get_data_mut_ptr().cast::<PGID>();
-                    let len = if count == 0xFFFF {
-                        1 + *ptr as usize
-                    } else {
-                        count
-                    };
-                    PageData::Freelist(std::slice::from_raw_parts_mut(ptr, len))
-                }
-                _ => {
-                    return Err(Error::corrupted(format!(
-                        "Unknown page type: {}",
-                        self.flags
-                    )));
-                }
-            })
-        }
+        Ok(match self.flags {
+            Flags::BRANCHES => PageData::Branches(self.elements(count)?),
+            Flags::LEAVES => PageData::Leaves(self.elements(count)?),
+            Flags::META => PageData::Meta(&self.elements::<Meta>(1)?[0]),
+            Flags::FREELIST => PageData::Freelist(self.elements(self.freelist_len()?)?),
+            _ => {
+                return Err(Error::corrupted(format!(
+                    "Unknown page type: {}",
+                    self.flags
+                )));
+            }
+        })
     }
 
     #[cfg_attr(not(test), expect(dead_code))]
@@ -213,13 +152,13 @@ impl Page {
             PageData::Branches(b) => {
                 if let Some(last) = b.last() {
                     size += (b.len() - 1) * BranchPageElement::SIZE;
-                    size += (last.pos + last.ksize) as usize;
+                    size += last.pos as usize + last.ksize as usize;
                 }
             }
             PageData::Leaves(l) => {
                 if let Some(last) = l.last() {
                     size += (l.len() - 1) * LeafPageElement::SIZE;
-                    size += (last.pos + last.ksize + last.vsize) as usize;
+                    size += last.pos as usize + last.ksize as usize + last.vsize as usize;
                 }
             }
             PageData::Meta(_) => {
@@ -232,7 +171,7 @@ impl Page {
         Ok(size)
     }
 
-    pub(crate) fn copy_data_from(&mut self, source: PageData) {
+    pub(crate) fn copy_data_from(&mut self, source: PageData) -> Result<(), Error> {
         let sbytes = source.as_bytes();
         match source {
             PageData::Freelist(c) => {
@@ -252,17 +191,16 @@ impl Page {
                 self.flags = Flags::BRANCHES;
             }
         }
-        unsafe {
-            std::ptr::copy_nonoverlapping(sbytes.as_ptr(), self.get_data_mut_ptr(), sbytes.len())
-        };
+        self.slice_mut(0, sbytes.len())?.copy_from_slice(sbytes);
+        Ok(())
     }
 
     /// Retrieves a list of branch nodes
     pub(crate) fn branch_page_elements(&self) -> Result<&[BranchPageElement], Error> {
-        match self.data()? {
-            PageData::Branches(l) => Ok(l),
-            _ => Err(Error::corrupted("Flags are not branches")),
+        if self.flags != Flags::BRANCHES {
+            return Err(Error::corrupted("Flags are not branches"));
         }
+        self.elements(self.count as usize)
     }
 
     /// Retrieves a list of branch nodes
@@ -270,8 +208,7 @@ impl Page {
         if self.flags != Flags::BRANCHES {
             return Err(Error::corrupted("Flags are not branches"));
         }
-        let count = self.count as usize;
-        Ok(unsafe { std::slice::from_raw_parts_mut(self.get_data_mut_ptr().cast(), count) })
+        self.elements_mut(self.count as usize)
     }
 
     /// Retrieves the branch node by index
@@ -292,12 +229,25 @@ impl Page {
             .ok_or_else(|| Error::corrupted(format!("Page {id}: element {index} out of range")))
     }
 
+    /// Retrieves the key of the branch node by index
+    pub(crate) fn branch_key(&self, index: usize) -> Result<&[u8], Error> {
+        self.branch_key_of(index, self.branch_page_element(index)?)
+    }
+
+    pub(crate) fn branch_key_of(
+        &self,
+        index: usize,
+        elem: &BranchPageElement,
+    ) -> Result<&[u8], Error> {
+        self.element_data(index * BranchPageElement::SIZE, elem.pos, elem.ksize)
+    }
+
     /// Retrieves a list of leaf nodes
     pub(crate) fn leaf_page_elements(&self) -> Result<&[LeafPageElement], Error> {
-        match self.data()? {
-            PageData::Leaves(l) => Ok(l),
-            _ => Err(Error::corrupted("Flags are not leaves")),
+        if self.flags != Flags::LEAVES {
+            return Err(Error::corrupted("Flags are not leaves"));
         }
+        self.elements(self.count as usize)
     }
 
     /// Retrieves a list of leaf nodes
@@ -305,8 +255,7 @@ impl Page {
         if self.flags != Flags::LEAVES {
             return Err(Error::corrupted("Flags are not leaves"));
         }
-        let count = self.count as usize;
-        Ok(unsafe { std::slice::from_raw_parts_mut(self.get_data_mut_ptr().cast(), count) })
+        self.elements_mut(self.count as usize)
     }
 
     /// Retrieves the leaf node by index
@@ -327,6 +276,32 @@ impl Page {
             .ok_or_else(|| Error::corrupted(format!("Page {id}: element {index} out of range")))
     }
 
+    /// Retrieves the key of the leaf node by index
+    pub(crate) fn leaf_key(&self, index: usize) -> Result<&[u8], Error> {
+        self.leaf_key_of(index, self.leaf_page_element(index)?)
+    }
+
+    pub(crate) fn leaf_key_of(&self, index: usize, elem: &LeafPageElement) -> Result<&[u8], Error> {
+        self.element_data(index * LeafPageElement::SIZE, elem.pos, elem.ksize)
+    }
+
+    /// Retrieves the value of the leaf node by index
+    pub(crate) fn leaf_value(&self, index: usize) -> Result<&[u8], Error> {
+        self.leaf_value_of(index, self.leaf_page_element(index)?)
+    }
+
+    pub(crate) fn leaf_value_of(
+        &self,
+        index: usize,
+        elem: &LeafPageElement,
+    ) -> Result<&[u8], Error> {
+        let pos = elem
+            .pos
+            .checked_add(elem.ksize)
+            .ok_or_else(|| self.out_of_bounds())?;
+        self.element_data(index * LeafPageElement::SIZE, pos, elem.vsize)
+    }
+
     /// returns a pointer to the metadata section of the page.
     pub(crate) fn meta(&self) -> Result<&Meta, Error> {
         match self.data()? {
@@ -340,7 +315,7 @@ impl Page {
         if self.flags != Flags::META {
             return Err(Error::corrupted("Flags are not meta"));
         }
-        Ok(unsafe { &mut *self.get_data_mut_ptr().cast::<Meta>() })
+        Ok(&mut self.elements_mut::<Meta>(1)?[0])
     }
 
     /// meta returns a pointer to the freelist section of the page.
@@ -356,25 +331,18 @@ impl Page {
         if self.flags != Flags::FREELIST {
             return Err(Error::corrupted("Flags are not freelist"));
         }
-        let count = self.count as usize;
-        let ptr = self.get_data_mut_ptr().cast::<PGID>();
-        let len = if count == 0xFFFF {
-            1 + unsafe { *ptr } as usize
-        } else {
-            count
-        };
-        Ok(unsafe { std::slice::from_raw_parts_mut(ptr, len) })
+        let len = self.freelist_len()?;
+        self.elements_mut(len)
     }
-}
 
-impl Page {
     #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn try_to_owned(&self) -> Result<OwnedPage, Error> {
-        let ptr = (self as *const Page).cast::<u8>();
-        unsafe {
-            let slice = std::slice::from_raw_parts(ptr, self.byte_size()?).to_owned();
-            Ok(OwnedPage::from_vec(slice))
+        let size = self.byte_size()?;
+        if size > Self::header_size() + self.data.len() {
+            return Err(self.out_of_bounds());
         }
+        let bytes = unsafe { std::slice::from_raw_parts((self as *const Page).cast::<u8>(), size) };
+        Ok(OwnedPage::from_vec(bytes.to_vec()))
     }
 }
 
@@ -443,14 +411,16 @@ impl OwnedPage {
 impl Borrow<Page> for OwnedPage {
     #[inline]
     fn borrow(&self) -> &Page {
-        unsafe { &*self.page.as_ptr().cast::<Page>() }
+        let len = self.len.saturating_sub(Page::header_size());
+        unsafe { &*(std::ptr::slice_from_raw_parts(self.as_ptr(), len) as *const Page) }
     }
 }
 
 impl BorrowMut<Page> for OwnedPage {
     #[inline]
     fn borrow_mut(&mut self) -> &mut Page {
-        unsafe { &mut *self.page.as_mut_ptr().cast::<Page>() }
+        let len = self.len.saturating_sub(Page::header_size());
+        unsafe { &mut *(std::ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), len) as *mut Page) }
     }
 }
 
@@ -474,7 +444,7 @@ impl fmt::Debug for OwnedPage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("OwnedPage")
             .field("size", &self.len)
-            .field("page", self as &Page)
+            .field("page", &&**self)
             .finish()
     }
 }

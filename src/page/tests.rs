@@ -5,8 +5,8 @@ use crate::meta::Meta;
 
 #[test]
 fn new() {
-    let mut buf = vec![0u8; 256];
-    let page = Page::from_buf_mut(&mut buf);
+    let mut buf = OwnedPage::new(256);
+    let page = Page::from_buf_mut(buf.buf_mut()).unwrap();
     assert_eq!(page.overflow, 0);
     assert_eq!(page.count, 0);
     assert_eq!(page.id, 0);
@@ -23,7 +23,7 @@ fn copy_data_from() {
     let mut page = OwnedPage::new(1024);
     page.flags = Flags::FREELIST;
     let ids: &[PGID] = &[23, 50];
-    page.copy_data_from(PageData::Freelist(ids));
+    page.copy_data_from(PageData::Freelist(ids)).unwrap();
 
     assert_eq!(page.count, 2);
     match page.data().unwrap() {
@@ -39,25 +39,25 @@ fn read_leaf_nodes() {
     let mut page = OwnedPage::new(4096);
     page.flags = Flags::LEAVES;
     page.count = 2;
-    let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
-    };
-    nodes[0] = LeafPageElement {
-        flags: 0,
-        pos: 32,
-        ksize: 3,
-        vsize: 4,
-    };
-    nodes[1] = LeafPageElement {
-        flags: 0,
-        pos: 23,
-        ksize: 10,
-        vsize: 3,
-    };
-
-    let data = unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 4096) };
-    data[..7].copy_from_slice("barfooz".as_bytes());
-    data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
+    {
+        let nodes = page.leaf_page_elements_mut().unwrap();
+        nodes[0] = LeafPageElement {
+            flags: 0,
+            pos: 32,
+            ksize: 3,
+            vsize: 4,
+        };
+        nodes[1] = LeafPageElement {
+            flags: 0,
+            pos: 23,
+            ksize: 10,
+            vsize: 3,
+        };
+    }
+    page.slice_mut(32, 7).unwrap().copy_from_slice(b"barfooz");
+    page.slice_mut(39, 13)
+        .unwrap()
+        .copy_from_slice(b"helloworldbye");
 
     let el = page.leaf_page_element(0).unwrap();
     assert_eq!(el.ksize, 3);
@@ -68,33 +68,37 @@ fn read_leaf_nodes() {
     assert_eq!(el.ksize, 10);
     assert_eq!(el.vsize, 3);
     assert_eq!(el.pos, 23);
+
+    assert_eq!(page.leaf_key(0).unwrap(), b"bar");
+    assert_eq!(page.leaf_value(0).unwrap(), b"fooz");
+    assert_eq!(page.leaf_key(1).unwrap(), b"helloworld");
+    assert_eq!(page.leaf_value(1).unwrap(), b"bye");
 }
 
 #[test]
 fn to_owned() {
-    let mut buf = vec![0u8; 1024];
-    let page = Page::from_buf_mut(&mut buf);
+    let mut page = OwnedPage::new(1024);
     page.flags = Flags::LEAVES;
     page.count = 2;
-    let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
-    };
-    nodes[0] = LeafPageElement {
-        flags: 0,
-        pos: 32,
-        ksize: 3,
-        vsize: 4,
-    };
-    nodes[1] = LeafPageElement {
-        flags: 0,
-        pos: 23,
-        ksize: 10,
-        vsize: 3,
-    };
-
-    let data = unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 4096) };
-    data[..7].copy_from_slice("barfooz".as_bytes());
-    data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
+    {
+        let nodes = page.leaf_page_elements_mut().unwrap();
+        nodes[0] = LeafPageElement {
+            flags: 0,
+            pos: 32,
+            ksize: 3,
+            vsize: 4,
+        };
+        nodes[1] = LeafPageElement {
+            flags: 0,
+            pos: 23,
+            ksize: 10,
+            vsize: 3,
+        };
+    }
+    page.slice_mut(32, 7).unwrap().copy_from_slice(b"barfooz");
+    page.slice_mut(39, 13)
+        .unwrap()
+        .copy_from_slice(b"helloworldbye");
 
     let owned = page.try_to_owned().unwrap();
     assert_eq!(
@@ -123,7 +127,7 @@ fn accessors_return_errors() {
 }
 
 #[test]
-fn check_bounds() {
+fn accessors_check_bounds() {
     let out_of_bounds = Some(Error::CheckFail(vec![
         "Page 3: data out of bounds".to_string(),
     ]));
@@ -137,29 +141,48 @@ fn check_bounds() {
         elem.ksize = 3;
         elem.vsize = 4;
     }
-    assert!(page.check_bounds(4096).is_ok());
-    assert_eq!(page.check_bounds(8).err(), out_of_bounds);
+    assert!(page.leaf_key(0).is_ok());
+    assert!(page.leaf_value(0).is_ok());
 
     page.leaf_page_element_mut(0).unwrap().vsize = 5000;
-    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+    assert!(page.leaf_key(0).is_ok());
+    assert_eq!(page.leaf_value(0).err(), out_of_bounds);
 
     page.count = 1000;
-    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
-
-    page.flags = Flags::META;
-    assert!(page.check_bounds(Page::header_size() + Meta::SIZE).is_ok());
-    assert_eq!(
-        page.check_bounds(Page::header_size() + Meta::SIZE - 1)
-            .err(),
-        out_of_bounds
-    );
+    assert_eq!(page.leaf_page_elements().err(), out_of_bounds);
 
     page.flags = Flags::FREELIST;
     page.count = 0xFFFF;
-    unsafe { *page.get_data_mut_ptr().cast::<PGID>() = 10_000 };
-    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
-    unsafe { *page.get_data_mut_ptr().cast::<PGID>() = u64::MAX };
-    assert_eq!(page.check_bounds(4096).err(), out_of_bounds);
+    page.slice_mut(0, 8)
+        .unwrap()
+        .copy_from_slice(&10_000u64.to_ne_bytes());
+    assert_eq!(page.freelist().err(), out_of_bounds);
+    page.slice_mut(0, 8)
+        .unwrap()
+        .copy_from_slice(&u64::MAX.to_ne_bytes());
+    assert_eq!(page.freelist().err(), out_of_bounds);
+
+    let mut meta = OwnedPage::new(Page::header_size() + Meta::SIZE - 1);
+    meta.flags = Flags::META;
+    assert!(meta.meta().is_err());
+    let mut meta = OwnedPage::new(Page::header_size() + Meta::SIZE);
+    meta.flags = Flags::META;
+    assert!(meta.meta().is_ok());
+
+    assert!(Page::from_buf(&OwnedPage::new(8).buf()[..8]).is_err());
+}
+
+#[test]
+fn header_size_matches_layout() {
+    let page = OwnedPage::new(64);
+    let page: &Page = &page;
+    let offset = unsafe {
+        page.data
+            .as_ptr()
+            .offset_from((page as *const Page).cast::<u8>())
+    };
+    assert_eq!(offset as usize, Page::header_size());
+    assert_eq!(Page::header_size(), 16);
 }
 
 #[test]

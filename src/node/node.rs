@@ -581,10 +581,8 @@ impl Node {
             return Ok(());
         }
 
-        let mut bptr = unsafe {
-            let offset = self.page_element_size() * inodes.len();
-            p.get_data_mut_ptr().add(offset)
-        };
+        let elem_size = self.page_element_size();
+        let mut offset = elem_size * inodes.len();
         let is_leaf = self.is_leaf();
         let pgid = p.id;
         for (i, item) in inodes.iter().enumerate() {
@@ -592,32 +590,28 @@ impl Node {
                 return Err("Write: zero-length inode key".into());
             }
 
+            let pos = (offset - i * elem_size) as u32;
+            let (klen, vlen) = (item.key.len(), item.value.len());
             if is_leaf {
                 let elem = p.leaf_page_element_mut(i)?;
-                let el_ptr = (elem as *const LeafPageElement).cast::<u8>();
-                elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
+                elem.pos = pos;
                 elem.flags = item.flags;
-                elem.ksize = item.key.len() as u32;
-                elem.vsize = item.value.len() as u32;
+                elem.ksize = klen as u32;
+                elem.vsize = vlen as u32;
             } else {
                 let elem = p.branch_page_element_mut(i)?;
-                let el_ptr = (elem as *const BranchPageElement).cast::<u8>();
-                elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
-                elem.ksize = item.key.len() as u32;
+                elem.pos = pos;
+                elem.ksize = klen as u32;
                 elem.pgid = item.pgid;
                 if elem.pgid == pgid {
                     return Err("Write: circular dependency occurred".into());
                 }
             }
 
-            let (klen, vlen) = (item.key.len(), item.value.len());
-
-            unsafe {
-                std::ptr::copy_nonoverlapping(item.key.as_ptr(), bptr, klen);
-                bptr = bptr.add(klen);
-                std::ptr::copy_nonoverlapping(item.value.as_ptr(), bptr, vlen);
-                bptr = bptr.add(vlen);
-            }
+            p.slice_mut(offset, klen)?.copy_from_slice(&item.key);
+            offset += klen;
+            p.slice_mut(offset, vlen)?.copy_from_slice(&item.value);
+            offset += vlen;
         }
         Ok(())
     }
@@ -646,8 +640,8 @@ impl Node {
                 let elem = page.leaf_page_element(i)?;
                 let inode = INode {
                     flags: elem.flags,
-                    key: elem.key().to_vec(),
-                    value: elem.value().to_vec(),
+                    key: page.leaf_key(i)?.to_vec(),
+                    value: page.leaf_value(i)?.to_vec(),
                     pgid: 0,
                 };
                 inodes.push(inode);
@@ -655,7 +649,7 @@ impl Node {
                 let elem = page.branch_page_element(i)?;
                 let inode = INode {
                     flags: 0,
-                    key: elem.key().to_vec(),
+                    key: page.branch_key(i)?.to_vec(),
                     value: Vec::new(),
                     pgid: elem.pgid,
                 };

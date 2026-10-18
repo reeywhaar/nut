@@ -193,7 +193,8 @@ impl FreeList {
             m.copy_from_slice(&self.get_pgids())
         } else {
             p.count = 0xFFFF;
-            unsafe { *p.get_data_mut_ptr().cast::<PGID>() = lenids as PGID };
+            p.slice_mut(0, size_of::<PGID>())?
+                .copy_from_slice(&(lenids as PGID).to_ne_bytes());
             let m = p.freelist_mut()?;
             m[1..].copy_from_slice(&self.get_pgids());
         }

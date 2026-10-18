@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
 /// finds continuous block in sorted vector
@@ -53,10 +54,6 @@ pub unsafe fn slice_to_u8_slice_mut<T: Sized>(p: &mut [T]) -> &mut [u8] {
     unsafe { from_raw_parts_mut(p.as_mut_ptr().cast::<u8>(), size_of_val(p)) }
 }
 
-pub fn is_aligned<T>(ptr: *const T) -> bool {
-    (ptr as usize).is_multiple_of(align_of::<T>())
-}
-
 /// dump writes n bytes of the page to STDERR as hex output.
 ///
 /// passing 0 as max will print entire struct
@@ -79,6 +76,22 @@ pub fn hexdump<T: Sized>(input: &T, max: usize) {
 pub fn hexdump_slice<T: Sized>(input: &[T], max: usize) {
     let buf = unsafe { from_raw_parts(input.as_ptr().cast::<u8>(), max) };
     eprintln!("{:x?}", buf);
+}
+
+pub(crate) fn try_binary_search<E>(
+    len: usize,
+    mut cmp: impl FnMut(usize) -> Result<Ordering, E>,
+) -> Result<Result<usize, usize>, E> {
+    let (mut low, mut high) = (0, len);
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match cmp(mid)? {
+            Ordering::Less => low = mid + 1,
+            Ordering::Greater => high = mid,
+            Ordering::Equal => return Ok(Ok(mid)),
+        }
+    }
+    Ok(Err(low))
 }
 
 #[cfg(test)]
