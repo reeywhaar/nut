@@ -76,10 +76,9 @@ impl Node {
         if self.is_leaf() {
             return Err(format!("Invalid childAt({index}) on a leaf node").into());
         }
-        Ok(self
-            .bucket_mut()
+        self.bucket_mut()
             .ok_or("Bucket empty")?
-            .node(self.0.inodes.borrow()[index].pgid, WeakNode::from(self)))
+            .node(self.0.inodes.borrow()[index].pgid, WeakNode::from(self))
     }
 
     /// Returns the next node with the same parent.
@@ -323,7 +322,7 @@ impl Node {
                     let mut child = self
                         .bucket_mut()
                         .ok_or("Bucket empty")?
-                        .node(inodes[0].pgid, WeakNode::from(self));
+                        .node(inodes[0].pgid, WeakNode::from(self))?;
 
                     self.0.is_leaf.store(child.is_leaf(), Ordering::Release);
                     *inodes = child.0.inodes.borrow_mut().drain(..).collect();

@@ -296,7 +296,7 @@ impl Bucket {
             // Release all bucket pages to freelist.
             child.nodes.borrow_mut().clear();
             child.root_node = None;
-            child.free();
+            child.free()?;
         }
 
         self.buckets.borrow_mut().remove(key);
@@ -446,7 +446,7 @@ impl Bucket {
         }
 
         if self.root_node.is_none() {
-            self.node(self.root(), WeakNode::new());
+            self.node(self.root(), WeakNode::new())?;
         }
 
         self.bucket.sequence += 1;
@@ -462,7 +462,7 @@ impl Bucket {
 
         if self.root_node.is_none() {
             let pgid = self.root();
-            self.node(pgid, WeakNode::new());
+            self.node(pgid, WeakNode::new())?;
         };
 
         self.bucket.sequence = value;
@@ -590,26 +590,30 @@ impl Bucket {
 
     /// Iterates over every page (or node) in a bucket.
     /// This also includes inline pages.
-    fn for_each_page_node<F>(&self, mut handler: F)
+    fn for_each_page_node<F>(&self, mut handler: F) -> Result<(), Error>
     where
-        F: FnMut(Either<&Page, &Node>, isize),
+        F: FnMut(Either<&Page, &Node>, isize) -> Result<(), Error>,
     {
         // If we have an inline page then just use that.
         if let Some(ref page) = self.page {
-            handler(PageNode::from(&raw const **page).upgrade(), 0);
-            return;
+            return handler(PageNode::from(&raw const **page).upgrade(), 0);
         }
         self.__for_each_page_node(self.bucket.root, 0, &mut handler)
     }
 
-    fn __for_each_page_node<F>(&self, pgid: PGID, depth: isize, handler: &mut F)
+    fn __for_each_page_node<F>(
+        &self,
+        pgid: PGID,
+        depth: isize,
+        handler: &mut F,
+    ) -> Result<(), Error>
     where
-        F: FnMut(Either<&Page, &Node>, isize),
+        F: FnMut(Either<&Page, &Node>, isize) -> Result<(), Error>,
     {
-        let item = self.page_node(pgid).unwrap();
+        let item = self.page_node(pgid)?;
 
         // Execute function.
-        handler(item.upgrade(), depth);
+        handler(item.upgrade(), depth)?;
 
         // Recursively loop over children.
         match item.upgrade() {
@@ -618,18 +622,19 @@ impl Bucket {
                 if is_branch {
                     for i in 0..p.count as usize {
                         let elem = p.branch_page_element(i);
-                        self.__for_each_page_node(elem.pgid, depth + 1, handler);
+                        self.__for_each_page_node(elem.pgid, depth + 1, handler)?;
                     }
                 }
             }
             Either::Right(n) => {
                 if !n.is_leaf() {
                     for inode in &*n.0.inodes.borrow() {
-                        self.__for_each_page_node(inode.pgid, depth + 1, handler)
+                        self.__for_each_page_node(inode.pgid, depth + 1, handler)?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
     /// Writes all the nodes for this bucket to dirty pages.
@@ -641,8 +646,8 @@ impl Bucket {
             // If the child bucket is small enough and it has no child buckets then
             // write it inline into the parent bucket's page. Otherwise spill it
             // like a normal bucket and make the parent value a pointer to the page.
-            let value = if child.inlineable() {
-                child.free();
+            let value = if child.inlineable()? {
+                child.free()?;
                 child.write()?
             } else {
                 child.spill()?;
@@ -703,31 +708,33 @@ impl Bucket {
 
     /// Returns true if a bucket is small enough to be written inline
     /// and if it contains no subbuckets. Otherwise returns false.
-    fn inlineable(&self) -> bool {
-        if self.root_node().is_none_or(|n| !n.is_leaf()) {
-            return false;
+    fn inlineable(&self) -> Result<bool, Error> {
+        let Some(node) = self.root_node() else {
+            return Ok(false);
+        };
+        if !node.is_leaf() {
+            return Ok(false);
         }
 
         let mut size = Page::header_size();
-        let node = self.root_node.clone().unwrap();
 
         for inode in &*node.0.inodes.borrow() {
             if inode.flags & Self::FLAG != 0 {
-                return false;
+                return Ok(false);
             }
 
             size += LeafPageElement::SIZE + inode.key.len() + inode.value.len();
-            if size > self.max_inline_bucket_size() {
-                return false;
+            if size > self.max_inline_bucket_size()? {
+                return Ok(false);
             }
         }
 
-        true
+        Ok(true)
     }
 
     /// Returns the maximum total size of a bucket to make it a candidate for inlining.
-    fn max_inline_bucket_size(&self) -> usize {
-        self.tx().unwrap().db().unwrap().page_size() / 4
+    fn max_inline_bucket_size(&self) -> Result<usize, Error> {
+        Ok(self.tx()?.db()?.page_size() / 4)
     }
 
     /// Allocates and writes a bucket to a byte slice.
@@ -764,13 +771,13 @@ impl Bucket {
     }
 
     /// Creates a node from a page and associates it with a given parent.
-    pub(crate) fn node(&mut self, pgid: PGID, parent: WeakNode) -> Node {
-        if !self.tx().unwrap().writable() {
-            panic!("tx is read-only");
+    pub(crate) fn node(&mut self, pgid: PGID, parent: WeakNode) -> Result<Node, Error> {
+        if !self.tx()?.writable() {
+            return Err(Error::TxReadonly);
         }
 
         if let Some(n) = self.nodes.borrow().get(&pgid) {
-            return n.clone();
+            return Ok(n.clone());
         };
 
         let mut node = NodeBuilder::new(self).parent(parent.clone()).build();
@@ -787,34 +794,32 @@ impl Bucket {
             node.read(page);
         } else {
             unsafe {
-                node.read(&*self.tx().unwrap().page(pgid).unwrap());
+                node.read(&*self.tx()?.page(pgid)?);
             }
         }
 
         self.nodes.borrow_mut().insert(pgid, node.clone());
 
         // Update statistics.
-        self.tx().unwrap().0.stats.lock().node_count += 1;
+        self.tx()?.0.stats.lock().node_count += 1;
 
-        node
+        Ok(node)
     }
 
     /// Recursively frees all pages in the bucket.
-    fn free(&mut self) {
+    fn free(&mut self) -> Result<(), Error> {
         if self.bucket.root == 0 {
-            return;
+            return Ok(());
         };
 
-        let tx = self.tx().unwrap();
-        let db = tx.db().unwrap();
+        let tx = self.tx()?;
+        let db = tx.db()?;
         self.for_each_page_node(|p, _| match p {
-            Either::Left(p) => {
-                let txid = tx.id();
-                db.0.freelist.write().free(txid, p).unwrap()
-            }
-            Either::Right(n) => n.clone().free().unwrap(),
-        });
+            Either::Left(p) => db.0.freelist.write().free(tx.id(), p),
+            Either::Right(n) => n.clone().free(),
+        })?;
         self.bucket.root = 0;
+        Ok(())
     }
 
     /// Returns the in-memory node, if it exists.

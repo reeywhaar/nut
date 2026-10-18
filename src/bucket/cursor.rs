@@ -206,7 +206,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             match el_ref.upgrade() {
                 Either::Left(p) => {
                     let id = p.id;
-                    self.bucket_mut().node(id, WeakNode::new())
+                    self.bucket_mut().node(id, WeakNode::new())?
                 }
                 Either::Right(n) => n.clone(),
             }
