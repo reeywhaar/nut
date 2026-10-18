@@ -192,7 +192,7 @@ fn owned_page_is_aligned() {
         assert!(page.as_ptr().cast::<u64>().is_aligned());
         assert_eq!(page.buf().len(), size);
     }
-    let page = OwnedPage::from_vec(vec![1, 2, 3]);
+    let page = OwnedPage::from_slice(&[1, 2, 3]);
     assert!(page.as_ptr().cast::<u64>().is_aligned());
     assert_eq!(page.buf(), &[1, 2, 3]);
 }

@@ -351,7 +351,7 @@ impl Page {
             return Err(self.out_of_bounds());
         }
         let bytes = unsafe { std::slice::from_raw_parts((self as *const Page).cast::<u8>(), size) };
-        Ok(OwnedPage::from_vec(bytes.to_vec()))
+        Ok(OwnedPage::from_slice(bytes))
     }
 }
 
@@ -374,9 +374,9 @@ impl OwnedPage {
         }
     }
 
-    pub(crate) fn from_vec(buf: Vec<u8>) -> Self {
+    pub(crate) fn from_slice(buf: &[u8]) -> Self {
         let mut page = Self::new(buf.len());
-        page.buf_mut().copy_from_slice(&buf);
+        page.buf_mut().copy_from_slice(buf);
         page
     }
 

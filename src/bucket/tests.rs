@@ -157,7 +157,7 @@ fn try_variants() {
 fn open_bucket_checks_value() {
     let bucket = bucket_mock(WeakTx::new());
     assert_eq!(
-        bucket.open_bucket(vec![0; 8]).err(),
+        bucket.open_bucket(&[0; 8]).err(),
         Some(Error::CheckFail(vec![
             "Bucket value too short: 8".to_string()
         ]))
@@ -171,7 +171,7 @@ fn open_bucket_checks_value() {
     for field in [0u32, 16, 1000, 0] {
         value.extend(field.to_ne_bytes());
     }
-    let child = bucket.open_bucket(value).unwrap();
+    let child = bucket.open_bucket(&value).unwrap();
     assert_eq!(
         child
             .page_node(0)

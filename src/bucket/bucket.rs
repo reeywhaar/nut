@@ -122,7 +122,7 @@ impl Bucket {
                 return Ok(None);
             };
 
-            value.ok_or("Value empty")?.to_vec()
+            value.ok_or("Value empty")?
         };
 
         // Otherwise create a bucket and cache it.
@@ -171,7 +171,7 @@ impl Bucket {
     /// from a parent into a Bucket
     ///
     /// value is bytes serialized bucket
-    pub(crate) fn open_bucket(&self, value: Vec<u8>) -> Result<Bucket, Error> {
+    pub(crate) fn open_bucket(&self, value: &[u8]) -> Result<Bucket, Error> {
         if value.len() < IBucket::SIZE {
             return Err(Error::corrupted(format!(
                 "Bucket value too short: {}",
@@ -202,14 +202,7 @@ impl Bucket {
 
         // Save a reference to the inline page if the bucket is inline.
         if child.bucket.root == 0 {
-            let data = unsafe {
-                let slice = &value[IBucket::SIZE..];
-                let mut vec = vec![0u8; slice.len()];
-                std::ptr::copy_nonoverlapping(slice.as_ptr(), vec.as_mut_ptr(), slice.len());
-                vec
-            };
-
-            child.page = Some(OwnedPage::from_vec(data));
+            child.page = Some(OwnedPage::from_slice(&value[IBucket::SIZE..]));
         }
 
         Ok(child)
@@ -572,8 +565,7 @@ impl Bucket {
                             if (e.flags & Self::FLAG) != 0 {
                                 // For any bucket element, open the element value
                                 // and recursively call Stats on the contained bucket.
-                                sub_stats +=
-                                    self.open_bucket(p.leaf_value(i)?.to_vec())?.try_stats()?;
+                                sub_stats += self.open_bucket(p.leaf_value(i)?)?.try_stats()?;
                             };
                         }
                     }
