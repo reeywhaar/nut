@@ -1,6 +1,7 @@
 #![expect(clippy::cast_ptr_alignment)]
 
 use anstyle::AnsiColor;
+use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hexdump::{hexdump_iter, sanitize_byte};
 use nut::{Bucket, BucketStats, DB, DBBuilder, FreedOrPageInfo, TxGuard};
@@ -21,10 +22,10 @@ fn validate_path(p: &str) -> Result<PathBuf, String> {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let result = match cli.command {
+    match cli.command {
         Commands::Dump {
             id,
             length,
@@ -48,12 +49,7 @@ fn main() {
         Commands::Check { path_shim } => check(CheckOptions {
             path: path_shim.path,
         }),
-    };
-
-    if let Err(result) = result {
-        eprintln!("Error: {result}");
-        std::process::exit(1);
-    };
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -133,23 +129,22 @@ struct DumpOptions {
     len: Option<u64>,
 }
 
-fn dump(o: DumpOptions) -> Result<(), String> {
-    let mut file = std::fs::File::open(&o.path).map_err(|_| "Can't open file")?;
-    let page_size = DB::get_meta(&mut file)?.page_size;
+fn dump(o: DumpOptions) -> Result<()> {
+    let mut file = std::fs::File::open(&o.path).context("Can't open file")?;
+    let page_size = DB::get_meta(&mut file)
+        .map_err(anyhow::Error::msg)?
+        .page_size;
     let offset = u64::from(page_size) * o.id as u64;
-    let meta = file
-        .metadata()
-        .map_err(|_| "Can't get file meta info")?
-        .len();
+    let meta = file.metadata().context("Can't get file meta info")?.len();
     if offset > meta {
-        return Err("ID out of bounds".to_string());
+        bail!("ID out of bounds");
     };
     let mut overflowbuf = [0u8; 4];
 
     file.seek(SeekFrom::Start(offset + 12))
-        .map_err(|_| "Can't seek file")?;
+        .context("Can't seek file")?;
     file.read_exact(&mut overflowbuf)
-        .map_err(|_| "Can't read file")?;
+        .context("Can't read file")?;
     let overflow = unsafe { *(&raw const overflowbuf[0]).cast::<u32>() };
     let mut take = (u64::from(overflow) + 1) * u64::from(page_size);
     if let Some(len) = o.len {
@@ -157,7 +152,7 @@ fn dump(o: DumpOptions) -> Result<(), String> {
     };
 
     file.seek(SeekFrom::Start(offset))
-        .map_err(|_| "Can't seek file")?;
+        .context("Can't seek file")?;
     let mut bound = Read::by_ref(&mut file).take(take);
 
     let stdout = std::io::stdout();
@@ -171,10 +166,8 @@ fn dump(o: DumpOptions) -> Result<(), String> {
                 for line in hexdump_iter(&obuf[..written]) {
                     stdout
                         .write_all(line.as_bytes())
-                        .map_err(|_| "Can't print output")?;
-                    stdout
-                        .write_all(&newline)
-                        .map_err(|_| "Can't print output")?;
+                        .context("Can't print output")?;
+                    stdout.write_all(&newline).context("Can't print output")?;
                 }
             }
             break;
@@ -184,14 +177,12 @@ fn dump(o: DumpOptions) -> Result<(), String> {
             for line in hexdump_iter(&obuf) {
                 stdout
                     .write_all(line.as_bytes())
-                    .map_err(|_| "Can't print output")?;
-                stdout
-                    .write_all(&newline)
-                    .map_err(|_| "Can't print output")?;
+                    .context("Can't print output")?;
+                stdout.write_all(&newline).context("Can't print output")?;
             }
         }
     }
-    stdout.write(&[0x0a]).map_err(|_| "Can't print output")?;
+    stdout.write(&[0x0a]).context("Can't print output")?;
     Ok(())
 }
 
@@ -199,7 +190,7 @@ struct CheckOptions {
     path: PathBuf,
 }
 
-fn check(o: CheckOptions) -> Result<(), String> {
+fn check(o: CheckOptions) -> Result<()> {
     let green = AnsiColor::Green.on_default();
     let red = AnsiColor::Red.on_default();
 
@@ -210,13 +201,13 @@ fn check(o: CheckOptions) -> Result<(), String> {
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
     for err in receiver {
-        writeln!(stdout, "    {err}").map_err(|_| "Can't write output")?;
+        writeln!(stdout, "    {err}").context("Can't write output")?;
         errlen += 1;
     }
     if errlen != 0 {
-        return Err(format!("{red}Check failed{red:#}"));
+        bail!("{red}Check failed{red:#}");
     }
-    writeln!(stdout, "{green}Everything ok{green:#}").map_err(|_| "Can't write output")?;
+    writeln!(stdout, "{green}Everything ok{green:#}").context("Can't write output")?;
     Ok(())
 }
 
@@ -225,14 +216,14 @@ struct InfoOptions {
     check: bool,
 }
 
-fn info(o: InfoOptions) -> Result<(), String> {
+fn info(o: InfoOptions) -> Result<()> {
     {
         let db = DBBuilder::new(&o.path).read_only(true).build()?;
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
-        writeln!(&mut stdout, "Page size: {}", db.page_size()).map_err(|_| "Can't write output")?;
+        writeln!(&mut stdout, "Page size: {}", db.page_size()).context("Can't write output")?;
         writeln!(&mut stdout, "Freelist id: {}", db.meta()?.freelist)
-            .map_err(|_| "Can't write output")?;
+            .context("Can't write output")?;
 
         {
             let tx = db.begin_tx()?;
@@ -247,17 +238,17 @@ fn info(o: InfoOptions) -> Result<(), String> {
                 count += 1;
                 Ok(())
             }))?;
-            writeln!(&mut stdout, "\nBucket keys ({count}):").map_err(|_| "Can't write output")?;
+            writeln!(&mut stdout, "\nBucket keys ({count}):").context("Can't write output")?;
             for key in bucket_keys {
                 let sanitized: String = key.clone().into_iter().map(sanitize_byte).collect();
                 writeln!(&mut stdout, "    {sanitized:<20} {key:02X?}")
-                    .map_err(|_| "Can't write output")?;
+                    .context("Can't write output")?;
             }
-            writeln!(&mut stdout, "\n{stats:#?}").map_err(|_| "Can't write output")?;
+            writeln!(&mut stdout, "\n{stats:#?}").context("Can't write output")?;
         }
 
         if o.check {
-            writeln!(&mut stdout, "\nCheck:").map_err(|_| "Can't write output")?;
+            writeln!(&mut stdout, "\nCheck:").context("Can't write output")?;
         }
     }
 
@@ -273,7 +264,7 @@ struct PagesOptions {
     ids: Option<Vec<usize>>,
 }
 
-fn pages(o: PagesOptions) -> Result<(), String> {
+fn pages(o: PagesOptions) -> Result<()> {
     let green = AnsiColor::Green.on_default();
     let db = DBBuilder::new(&o.path).read_only(true).build()?;
     let tx = db.begin_tx()?;
@@ -294,7 +285,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
         width3 = paddings.2,
         width4 = paddings.3
     )
-    .map_err(|_| "Can't write output")?;
+    .context("Can't write output")?;
     writeln!(
         &mut stdout,
         "{} {} {} {}",
@@ -303,29 +294,31 @@ fn pages(o: PagesOptions) -> Result<(), String> {
         "-".repeat(paddings.2),
         "-".repeat(paddings.3)
     )
-    .map_err(|_| "Can't write output")?;
+    .context("Can't write output")?;
 
     let freed = tx.freed()?;
 
-    let ids = o
-        .ids
-        .ok_or("Found none when unwrapping ids")
-        .or_else(|_v| get_page_ids(&tx))?;
+    let ids = match o.ids {
+        Some(ids) => ids,
+        None => get_page_ids(&tx)?,
+    };
 
     let mut overflowed = HashSet::new();
     let pages_info = ids
         .into_iter()
-        .map(|id| -> Result<_, String> {
+        .map(|id| -> Result<_> {
             if freed.contains_key(&(id as u64)) {
                 return Ok(Some(FreedOrPageInfo::Freed(id)));
             }
             if overflowed.contains(&id) {
                 return Ok(None);
             }
-            let info = tx.page_info(id)?.ok_or(format!("Page {id} not found"))?;
+            let info = tx
+                .page_info(id)?
+                .with_context(|| format!("Page {id} not found"))?;
             if info.overflow_count > 0 {
                 if tx.page_info(id + info.overflow_count)?.is_none() {
-                    return Err(format!("Page {id}: overflow out of bounds"));
+                    bail!("Page {id}: overflow out of bounds");
                 }
                 for i in 1..=info.overflow_count {
                     overflowed.insert(id + i);
@@ -343,7 +336,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
     for info in pages_info {
         match info {
             FreedOrPageInfo::Freed(id) => {
-                writeln!(&mut stdout, "{id:>6} free").map_err(|_| "Can't write output")?
+                writeln!(&mut stdout, "{id:>6} free").context("Can't write output")?
             }
             FreedOrPageInfo::PageInfo(p) => writeln!(
                 &mut stdout,
@@ -357,13 +350,13 @@ fn pages(o: PagesOptions) -> Result<(), String> {
                 width3 = paddings.2,
                 width4 = paddings.3,
             )
-            .map_err(|_| "Can't write output")?,
+            .context("Can't write output")?,
         }
     }
     Ok(())
 }
 
-fn get_page_ids(tx: &TxGuard) -> Result<Vec<usize>, String> {
+fn get_page_ids(tx: &TxGuard) -> Result<Vec<usize>> {
     let mut ids = vec![];
     let mut id = 0;
     while let Some(_p) = tx.page_info(id)? {
@@ -403,14 +396,13 @@ fn tree_writer(
     Ok(())
 }
 
-fn tree(o: TreeOptions) -> Result<(), String> {
+fn tree(o: TreeOptions) -> Result<()> {
     let db = DBBuilder::new(o.path).read_only(true).build()?;
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
-    writeln!(&mut stdout, "{:<40} binary", "key").map_err(|_| "Can't write output")?;
-    writeln!(&mut stdout, "{} {}", "=".repeat(40), "=".repeat(20))
-        .map_err(|_| "Can't write output")?;
+    writeln!(&mut stdout, "{:<40} binary", "key").context("Can't write output")?;
+    writeln!(&mut stdout, "{} {}", "=".repeat(40), "=".repeat(20)).context("Can't write output")?;
 
     {
         let tx = db.begin_tx()?;

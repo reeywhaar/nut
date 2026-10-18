@@ -19,7 +19,7 @@ required-features = ["cli"]
 
 [features]
 default = ["cli"]
-cli = ["dep:clap", "dep:hexdump", "dep:anstyle"]
+cli = ["dep:clap", "dep:hexdump", "dep:anstyle", "dep:anyhow"]
 
 [dependencies]
 fnv = "1.0.7"
@@ -35,6 +35,7 @@ parking_lot = "0.12.5"
 clap = { version = "4.6.7", features = ["derive"], optional = true }
 hexdump = { version = "0.1.3", optional = true }
 anstyle = { version = "1.0.14", optional = true }
+anyhow = { version = "1.0.104", optional = true }
 
 [dev-dependencies]
 rand = "0.10.3"
