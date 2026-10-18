@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::bucket::IBucket;
 use crate::consts::{Flags, MAGIC, MAX_MAP_SIZE, MAX_MMAP_STEP, PGID, VERSION};
-use crate::errors::Error;
+use crate::errors::{Error, io};
 use crate::freelist::FreeList;
 use crate::meta::Meta;
 use crate::page::{OwnedPage, Page};
@@ -88,12 +88,12 @@ impl<'a> DB {
     ) -> Result<Self, Error> {
         let path = path.into();
         let needs_initialization =
-            (!path.exists()) || file.metadata().map_err(|_| "Can't read metadata")?.len() == 0;
+            (!path.exists()) || file.metadata().map_err(io("Can't read metadata"))?.len() == 0;
 
         if !options.read_only {
-            file.lock().map_err(|_e| "Cannot lock db file")?;
+            file.lock().map_err(io("Cannot lock db file"))?;
         } else {
-            file.lock_shared().map_err(|_e| "Cannot lock db file")?;
+            file.lock_shared().map_err(io("Cannot lock db file"))?;
         };
 
         let page_size = if needs_initialization {
@@ -112,7 +112,7 @@ impl<'a> DB {
         if options.read_only {
             let size = file
                 .allocated_size()
-                .map_err(|_e| "Cannot get file allocated size")?;
+                .map_err(io("Cannot get file allocated size"))?;
             if size < minimal_file_size {
                 return Err(format!(
                     "Minimal file size {size} is less than required: {minimal_file_size}"
@@ -121,14 +121,14 @@ impl<'a> DB {
             }
         } else {
             file.allocate(minimal_file_size)
-                .map_err(|_e| "Cannot allocate 4 required pages")?;
+                .map_err(io("Cannot allocate 4 required pages"))?;
         }
 
         let mmap = unsafe {
             memmap2::MmapOptions::new()
                 .offset(0)
                 .map(&file)
-                .map_err(|e| format!("Mmap failed: {e}"))?
+                .map_err(io("Mmap failed"))?
         };
 
         let mut db = Self(Arc::new(DBInner {
@@ -192,9 +192,9 @@ impl<'a> DB {
     pub fn get_meta(file: &mut File) -> Result<Meta, String> {
         let mut buf = [0u8; 12];
         file.seek(SeekFrom::Start(Page::header_size() as u64))
-            .map_err(|_| "Can't seek file".to_string())?;
+            .map_err(|e| format!("Can't seek file: {e}"))?;
         file.read_exact(&mut buf)
-            .map_err(|_| "Can't read file to buffer".to_string())?;
+            .map_err(|e| format!("Can't read file to buffer: {e}"))?;
         let magic: u32 = unsafe { *(&raw const buf[0]).cast::<u32>() };
         if magic != MAGIC {
             return Err("Incorrect header".to_string());
@@ -202,10 +202,10 @@ impl<'a> DB {
         let page_size: u32 = unsafe { *(&raw const buf[8]).cast::<u32>() };
         let page_size = page_size as usize;
         file.seek(SeekFrom::Start(0))
-            .map_err(|_| "Can't seek file".to_string())?;
+            .map_err(|e| format!("Can't seek file: {e}"))?;
         let mut metabuf = vec![0u8; page_size * 2];
         file.read_exact(&mut metabuf)
-            .map_err(|_| "Can't read file to buffer".to_string())?;
+            .map_err(|e| format!("Can't read file to buffer: {e}"))?;
 
         let metap0 = unsafe { &*(&raw const metabuf[0]).cast::<Page>() };
         let metap1 = unsafe { &*(&raw const metabuf[page_size]).cast::<Page>() };
@@ -331,7 +331,7 @@ impl<'a> DB {
         self.cleanup()?;
 
         if self.0.path.exists() {
-            std::fs::remove_file(&self.0.path).map_err(|_| "Can't remove file")?;
+            std::fs::remove_file(&self.0.path).map_err(io("Can't remove file"))?;
         }
 
         Ok(())
@@ -359,10 +359,10 @@ impl<'a> DB {
 
         let file = file.get_ref();
 
-        file.unlock().map_err(|_| "Can't unlock db file")?;
+        file.unlock().map_err(io("Can't unlock db file"))?;
 
         if self.0.autoremove && self.0.path.exists() {
-            std::fs::remove_file(&self.0.path).map_err(|_| "Can't remove file")?;
+            std::fs::remove_file(&self.0.path).map_err(io("Can't remove file"))?;
         }
         Ok(())
     }
@@ -596,8 +596,8 @@ impl<'a> DB {
     pub(crate) fn write_at<T: Read>(&mut self, pos: u64, mut buf: T) -> Result<(), Error> {
         let mut file = self.0.file.write();
         file.seek(SeekFrom::Start(pos))
-            .map_err(|_e| "Can't seek to position")?;
-        std::io::copy(&mut buf, &mut *file).map_err(|_e| "Can't write buffer")?;
+            .map_err(io("Can't seek to position"))?;
+        std::io::copy(&mut buf, &mut *file).map_err(io("Can't write buffer"))?;
         Ok(())
     }
 
@@ -627,7 +627,7 @@ impl<'a> DB {
             let file_len = file
                 .get_ref()
                 .metadata()
-                .map_err(|_| "Can't get file metadata")?
+                .map_err(io("Can't get file metadata"))?
                 .len();
             size = u64::min(size, file_len);
         }
@@ -637,7 +637,7 @@ impl<'a> DB {
         if !self.read_only() {
             file.get_ref()
                 .allocate(size)
-                .map_err(|e| format!("Can't allocate space: {e}"))?;
+                .map_err(io("Can't allocate space"))?;
         }
 
         // TODO: madvise
@@ -647,7 +647,7 @@ impl<'a> DB {
                 .offset(0)
                 .len(size as usize)
                 .map(file.get_ref())
-                .map_err(|e| format!("Mmap failed: {e}"))?
+                .map_err(io("Mmap failed"))?
         };
         *mmap_size = nmmap.len();
         *mmap = nmmap;
@@ -706,11 +706,7 @@ impl<'a> DB {
     }
 
     pub(crate) fn sync(&mut self) -> Result<(), Error> {
-        self.0
-            .file
-            .write()
-            .flush()
-            .map_err(|_e| "Can't sync data".into())
+        self.0.file.write().flush().map_err(io("Can't sync data"))
     }
 
     pub fn stats(&self) -> Stats {
@@ -828,13 +824,13 @@ impl<'a> DB {
             .map_err(|_e| Error::ResizeFail)?;
 
         if !self.0.no_grow_sync {
-            file.get_ref().sync_all().map_err(|_| "Can't flush file")?;
+            file.get_ref().sync_all().map_err(io("Can't flush file"))?;
         }
 
         *self.0.file_size.write() = file
             .get_ref()
             .metadata()
-            .map_err(|_| "Can't get metadata file")?
+            .map_err(io("Can't get metadata file"))?
             .len();
         Ok(())
     }

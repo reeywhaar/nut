@@ -207,12 +207,26 @@ impl Error {
     }
 }
 
+pub(crate) fn io(op: &'static str) -> impl FnOnce(IOError) -> Error {
+    move |e| Error::Unexpected(format!("{op}: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Error;
+    use super::{Error, io};
+    use std::io::{Error as IOError, ErrorKind};
 
     #[test]
     fn lock() {
         assert_eq!(Error::lock("meta"), Error::LockError("meta".to_string()));
+    }
+
+    #[test]
+    fn io_keeps_cause() {
+        let e = io("Can't seek file")(IOError::from(ErrorKind::NotFound));
+        assert_eq!(
+            e.to_string(),
+            "Unexpected: Can't seek file: entity not found"
+        );
     }
 }
