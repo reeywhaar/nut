@@ -1,6 +1,7 @@
 use either::Either;
 
 use super::{Bucket, ElemRef};
+use crate::errors::Error;
 
 /// Contains references to retrieved bucket's item key, value and flags
 #[derive(Debug)]
@@ -42,15 +43,17 @@ impl<'a> CursorItem<'a> {
     }
 }
 
-impl<'a> From<&ElemRef> for CursorItem<'a> {
-    fn from(el_ref: &ElemRef) -> Self {
+impl<'a> TryFrom<&ElemRef> for CursorItem<'a> {
+    type Error = Error;
+
+    fn try_from(el_ref: &ElemRef) -> Result<Self, Error> {
         if (el_ref.count() == 0) || el_ref.index >= el_ref.count() {
-            return Self::new(None, None, 0);
+            return Ok(Self::new(None, None, 0));
         }
         unsafe {
-            match el_ref.upgrade() {
+            Ok(match el_ref.upgrade() {
                 Either::Left(p) => {
-                    let elem = p.leaf_page_element(el_ref.index);
+                    let elem = p.leaf_page_element(el_ref.index)?;
                     Self::new(
                         Some(&*(elem.key() as *const [u8])),
                         Some(&*(elem.value() as *const [u8])),
@@ -65,7 +68,7 @@ impl<'a> From<&ElemRef> for CursorItem<'a> {
                         inode.flags,
                     )
                 }
-            }
+            })
         }
     }
 }

@@ -153,14 +153,14 @@ impl FreeList {
         let mut count = p.count as usize;
         if count == 0xFFFF {
             idx = 1;
-            let frl = p.freelist();
+            let frl = p.freelist()?;
             count = frl[0] as usize;
         }
 
         if count == 0 {
             self.ids.clear();
         } else {
-            let ids = p.freelist();
+            let ids = p.freelist()?;
             self.ids = ids[idx..count].to_vec();
             self.ids.sort_unstable();
         }
@@ -172,7 +172,7 @@ impl FreeList {
     /// write writes the page ids onto a freelist page. All free and pending ids are
     /// saved to disk since in the event of a program crash, all pending ids will
     /// become free.
-    pub fn write(&mut self, p: &mut Page) {
+    pub fn write(&mut self, p: &mut Page) -> Result<(), Error> {
         // Combine the old free pgids and pgids waiting on an open transaction.
 
         // The page.count can only hold up to 64k elements so if we overflow that
@@ -183,14 +183,15 @@ impl FreeList {
             p.count = lenids as u16;
         } else if lenids < 0xFFFF {
             p.count = lenids as u16;
-            let m = p.freelist_mut();
+            let m = p.freelist_mut()?;
             m.copy_from_slice(&self.get_pgids())
         } else {
             p.count = 0xFFFF;
-            let m = p.freelist_mut();
+            let m = p.freelist_mut()?;
             m[0] = lenids as u64;
             m.copy_from_slice(&self.get_pgids());
         }
+        Ok(())
     }
 
     /// reload reads the freelist from a page and filters out pending items.

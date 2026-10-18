@@ -105,7 +105,7 @@ impl<'a> DB {
             if page.flags != Flags::META {
                 return Err("Database format unknown".into());
             }
-            page.meta().page_size as usize
+            page.meta()?.page_size as usize
         };
 
         let minimal_file_size = page_size as u64 * 4;
@@ -210,20 +210,7 @@ impl<'a> DB {
         let metap0 = unsafe { &*(&raw const metabuf[0]).cast::<Page>() };
         let metap1 = unsafe { &*(&raw const metabuf[page_size]).cast::<Page>() };
 
-        let (mut meta0, mut meta1) = (metap0.meta(), metap1.meta());
-        if meta1.txid > meta0.txid {
-            std::mem::swap(&mut meta0, &mut meta1);
-        }
-
-        if meta0.validate().is_ok() {
-            return Ok(meta0.clone());
-        }
-
-        if meta1.validate().is_ok() {
-            return Ok(meta1.clone());
-        }
-
-        Err("Invalid meta".to_string())
+        newest_valid_meta([metap0, metap1]).ok_or_else(|| "Invalid meta".to_string())
     }
 
     #[inline(always)]
@@ -298,7 +285,7 @@ impl<'a> DB {
             let p = self.page_in_buffer(&mut buf, i);
             p.id = i;
             p.flags = Flags::META;
-            let m = p.meta_mut();
+            let m = p.meta_mut()?;
             m.magic = MAGIC;
             m.version = VERSION;
             m.page_size = self.0.page_size as u32;
@@ -681,8 +668,8 @@ impl<'a> DB {
         drop(mmap);
         drop(mmap_size);
 
-        let check0 = self.page(0).meta().validate();
-        let check1 = self.page(1).meta().validate();
+        let check0 = self.page(0).meta().and_then(|m| m.validate());
+        let check1 = self.page(1).meta().and_then(|m| m.validate());
 
         // Validate the meta pages. We only return an error if both meta pages fail
         // validation, since meta0 failing validation means that it wasn't saved
@@ -783,21 +770,8 @@ impl<'a> DB {
 
     pub fn meta(&self) -> Result<Meta, Error> {
         let (page0, page1) = (self.page(0), self.page(1));
-        let (mut meta0, mut meta1) = (page0.meta(), page1.meta());
-
-        if meta1.txid > meta0.txid {
-            std::mem::swap(&mut meta0, &mut meta1);
-        }
-
-        if meta0.validate().is_ok() {
-            return Ok(meta0.clone());
-        };
-
-        if meta1.validate().is_ok() {
-            return Ok(meta1.clone());
-        };
-
-        Err("nut::DB.meta(): invalid meta pages".into())
+        newest_valid_meta([&page0, &page1])
+            .ok_or_else(|| "nut::DB.meta(): invalid meta pages".into())
     }
 
     pub(crate) fn allocate(&mut self, count: u64, tx: &mut Tx) -> Result<OwnedPage, Error> {
@@ -909,4 +883,18 @@ impl WeakDB {
     pub(crate) fn as_ptr(&self) -> *const () {
         self.0.as_ptr().cast()
     }
+}
+
+fn newest_valid_meta(pages: [&Page; 2]) -> Option<Meta> {
+    pages
+        .into_iter()
+        .filter_map(|page| page.meta().ok().filter(|meta| meta.validate().is_ok()))
+        .reduce(|newest, meta| {
+            if meta.txid > newest.txid {
+                meta
+            } else {
+                newest
+            }
+        })
+        .cloned()
 }

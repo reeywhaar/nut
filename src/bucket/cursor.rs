@@ -119,7 +119,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     }
 
     fn search_page(&self, key: &[u8], p: &Page) -> Result<(), Error> {
-        let inodes = p.branch_page_elements();
+        let inodes = p.branch_page_elements()?;
         let (exact, mut index) = match inodes.binary_search_by(|inode| inode.key().cmp(key)) {
             Ok(mut v) => {
                 for (i, inode) in inodes.iter().enumerate().skip(v) {
@@ -143,7 +143,11 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             .index = index;
 
         // Recursively search to the next page.
-        self.search(key, inodes[index].pgid)?;
+        let pgid = inodes
+            .get(index)
+            .ok_or_else(|| format!("Page {}: element {index} out of range", p.id))?
+            .pgid;
+        self.search(key, pgid)?;
 
         Ok(())
     }
@@ -168,7 +172,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
         // If we have a page then search its leaf elements.
         let page = el_ref.el.upgrade().left().ok_or("Left empty")?;
-        let inodes = page.leaf_page_elements();
+        let inodes = page.leaf_page_elements()?;
         let index = match inodes.binary_search_by(|inode| inode.key().cmp(key)) {
             Ok(v) => v,
             Err(v) => v,
@@ -182,7 +186,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     fn key_value(&self) -> Result<CursorItem<'a>, Error> {
         let stack = self.stack.borrow();
         let el_ref = stack.last().ok_or(Error::StackEmpty)?;
-        Ok(CursorItem::from(el_ref))
+        CursorItem::try_from(el_ref)
     }
 
     /// Returns the node that the cursor is currently positioned on.
@@ -267,7 +271,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             };
 
             let pgid = match el_ref.upgrade() {
-                Either::Left(p) => p.branch_page_element(el_ref.index).pgid,
+                Either::Left(p) => p.branch_page_element(el_ref.index)?.pgid,
                 Either::Right(n) => n.0.inodes.borrow()[el_ref.index].pgid,
             };
             let el_ref = self.bucket.page_node(pgid)?;
@@ -317,7 +321,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             }
 
             let pgid = match el_ref.upgrade() {
-                Either::Left(p) => p.branch_page_element(el_ref.index).pgid,
+                Either::Left(p) => p.branch_page_element(el_ref.index)?.pgid,
                 Either::Right(n) => n.0.inodes.borrow()[el_ref.index].pgid,
             };
 

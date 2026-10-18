@@ -132,7 +132,7 @@ fn write() {
         page
     };
 
-    fl.write(&mut page);
+    fl.write(&mut page).unwrap();
 
     let mut fl2 = FreeList::default();
     fl2.read(&page).unwrap();

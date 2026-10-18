@@ -77,7 +77,7 @@ fn read_page() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
-    n.read(&page);
+    n.read(&page).unwrap();
     let inodes = n.0.inodes.borrow();
 
     assert!(n.is_leaf());
@@ -142,7 +142,7 @@ fn write_page() {
     assert_eq!(nodes[2].pos, 36);
 
     let mut n2 = node_mock(&raw const bucket);
-    n2.read(&page);
+    n2.read(&page).unwrap();
     let inodes = n2.0.inodes.borrow();
     assert!(n2.is_leaf());
     assert_eq!(inodes.len(), 3);

@@ -300,13 +300,13 @@ impl Tx {
 
         // first page
         {
-            *page.meta_mut() = self
+            *page.meta_mut()? = self
                 .0
                 .meta
                 .try_read()
                 .ok_or_else(|| Error::lock("meta"))?
                 .clone();
-            page.meta_mut().checksum = page.meta().sum64();
+            page.meta_mut()?.checksum = page.meta()?.sum64();
             w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
         }
@@ -314,8 +314,8 @@ impl Tx {
         // second page
         {
             page.id = 1;
-            page.meta_mut().txid -= 1;
-            page.meta_mut().checksum = page.meta().sum64();
+            page.meta_mut()?.txid -= 1;
+            page.meta_mut()?.checksum = page.meta()?.sum64();
             w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
         }
@@ -447,7 +447,7 @@ impl Tx {
             db.0.freelist
                 .try_write()
                 .ok_or_else(|| Error::lock("freelist"))?
-                .write(page);
+                .write(page)?;
             self.0
                 .meta
                 .try_write()
@@ -831,7 +831,7 @@ impl Tx {
         }
         let count = p.count as usize;
         for i in 0..count {
-            let el = p.branch_page_element(i);
+            let el = p.branch_page_element(i)?;
             self.for_each_page(el.pgid, depth + 1, Box::new(|p, d| func(p, d)))?;
         }
         Ok(())

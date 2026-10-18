@@ -1,5 +1,6 @@
 use super::{OwnedPage, Page, PageData, leaf_page_element::LeafPageElement};
 use crate::consts::{Flags, PGID};
+use crate::errors::Error;
 
 #[test]
 fn new() {
@@ -24,7 +25,7 @@ fn copy_data_from() {
     page.copy_data_from(PageData::Freelist(ids));
 
     assert_eq!(page.count, 2);
-    match page.data() {
+    match page.data().unwrap() {
         PageData::Freelist(l) => {
             assert_eq!(&[23, 50], l);
         }
@@ -57,12 +58,12 @@ fn read_leaf_nodes() {
     data[..7].copy_from_slice("barfooz".as_bytes());
     data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
 
-    let el = page.leaf_page_element(0);
+    let el = page.leaf_page_element(0).unwrap();
     assert_eq!(el.ksize, 3);
     assert_eq!(el.vsize, 4);
     assert_eq!(el.pos, 32);
 
-    let el = page.leaf_page_element(1);
+    let el = page.leaf_page_element(1).unwrap();
     assert_eq!(el.ksize, 10);
     assert_eq!(el.vsize, 3);
     assert_eq!(el.pos, 23);
@@ -94,9 +95,28 @@ fn to_owned() {
     data[..7].copy_from_slice("barfooz".as_bytes());
     data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
 
-    let owned = page.to_owned();
+    let owned = page.try_to_owned().unwrap();
     assert_eq!(
         owned.page.len(),
         Page::header_size() + LeafPageElement::SIZE + 23 + 10 + 3
+    );
+}
+
+#[test]
+fn accessors_return_errors() {
+    let mut page = OwnedPage::new(1024);
+    page.id = 7;
+    page.flags = Flags::from_bits_retain(0x20);
+    assert!(page.data().is_err());
+
+    page.flags = Flags::BRANCHES;
+    page.count = 1;
+    assert!(page.leaf_page_elements().is_err());
+    assert!(page.branch_page_element(0).is_ok());
+    assert_eq!(
+        page.branch_page_element(1).err(),
+        Some(Error::Unexpected(
+            "Page 7: element 1 out of range".to_string()
+        ))
     );
 }

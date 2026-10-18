@@ -621,14 +621,14 @@ impl Node {
             }
 
             if is_leaf {
-                let elem = p.leaf_page_element_mut(i);
+                let elem = p.leaf_page_element_mut(i)?;
                 let el_ptr = (elem as *const LeafPageElement).cast::<u8>();
                 elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
                 elem.flags = item.flags;
                 elem.ksize = item.key.len() as u32;
                 elem.vsize = item.value.len() as u32;
             } else {
-                let elem = p.branch_page_element_mut(i);
+                let elem = p.branch_page_element_mut(i)?;
                 let el_ptr = (elem as *const BranchPageElement).cast::<u8>();
                 elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
                 elem.ksize = item.key.len() as u32;
@@ -661,7 +661,7 @@ impl Node {
     }
 
     /// Initializes the node from a page.
-    pub(crate) fn read(&mut self, page: &Page) {
+    pub(crate) fn read(&mut self, page: &Page) -> Result<(), Error> {
         *self.0.pgid.borrow_mut() = page.id;
         self.0
             .is_leaf
@@ -671,7 +671,7 @@ impl Node {
 
         for i in 0..page.count as usize {
             if is_leaf {
-                let elem = page.leaf_page_element(i);
+                let elem = page.leaf_page_element(i)?;
                 let inode = INode {
                     flags: elem.flags,
                     key: elem.key().to_vec(),
@@ -680,7 +680,7 @@ impl Node {
                 };
                 inodes.push(inode);
             } else {
-                let elem = page.branch_page_element(i);
+                let elem = page.branch_page_element(i)?;
                 let inode = INode {
                     flags: 0,
                     key: elem.key().to_vec(),
@@ -701,6 +701,7 @@ impl Node {
                 Some(inodes[0].key.clone())
             };
         }
+        Ok(())
     }
 
     /// Finds the position where a page will fill a given threshold.

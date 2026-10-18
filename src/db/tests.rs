@@ -1,5 +1,5 @@
 use super::common::{Batch, Call};
-use super::{CheckMode, DBBuilder, WeakDB};
+use super::{CheckMode, DB, DBBuilder, WeakDB};
 use crate::consts::{MAGIC, MAX_MAP_SIZE};
 use crate::errors::Error;
 use crate::test_utils::temp_file;
@@ -259,4 +259,52 @@ fn try_stats_reports_lock_error() {
 fn info_points_to_mmap() {
     let db = db_mock().build().unwrap();
     assert_eq!(db.info().data, db.0.mmap.read().as_ptr());
+}
+
+#[test]
+fn meta_falls_back_to_valid_page() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let path = {
+        let db = DBBuilder::new(temp_file()).build().unwrap();
+        db.path().to_owned()
+    };
+    let page_size = page_size::get() as u64;
+    let corrupt_page_type = |page: u64| {
+        let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        file.seek(SeekFrom::Start(page * page_size + 8)).unwrap();
+        file.write_all(&2u16.to_ne_bytes()).unwrap();
+    };
+
+    corrupt_page_type(1);
+    let mut file = std::fs::File::open(&path).unwrap();
+    assert!(DB::get_meta(&mut file).is_ok());
+    let db = DBBuilder::new(&path).autoremove(true).build().unwrap();
+    assert!(db.meta().is_ok());
+    drop(db);
+}
+
+#[test]
+fn meta_fails_when_both_pages_invalid() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let path = {
+        let db = DBBuilder::new(temp_file()).build().unwrap();
+        db.path().to_owned()
+    };
+    let page_size = page_size::get() as u64;
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .unwrap();
+    for page in [0, 1] {
+        file.seek(SeekFrom::Start(page * page_size + 8)).unwrap();
+        file.write_all(&2u16.to_ne_bytes()).unwrap();
+    }
+    assert_eq!(
+        DB::get_meta(&mut file).err(),
+        Some("Invalid meta".to_string())
+    );
+    std::fs::remove_file(&path).unwrap();
 }

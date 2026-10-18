@@ -538,7 +538,7 @@ impl Bucket {
                     // of the last element's key/value equals to the total of the sizes
                     // of all previous elements' keys and values.
                     // It also includes the last element's header.
-                    let last_element = p.leaf_page_element(page_count - 1);
+                    let last_element = p.leaf_page_element(page_count - 1)?;
                     used += (last_element.pos + last_element.ksize + last_element.vsize) as usize;
 
                     if self.bucket.root == 0 {
@@ -554,7 +554,7 @@ impl Bucket {
                         // Do that by iterating over all element headers
                         // looking for the ones with the bucketLeafFlag.
                         for i in 0..page_count {
-                            let e = p.leaf_page_element(i);
+                            let e = p.leaf_page_element(i)?;
                             if (e.flags & Self::FLAG) != 0 {
                                 // For any bucket element, open the element value
                                 // and recursively call Stats on the contained bucket.
@@ -564,7 +564,7 @@ impl Bucket {
                     }
                 } else if p.flags == Flags::BRANCHES {
                     stats.branch_page_n += 1;
-                    let last_element = p.branch_page_element(page_count - 1);
+                    let last_element = p.branch_page_element(page_count - 1)?;
 
                     // used totals the used bytes for the page
                     // Add header and all element headers.
@@ -646,7 +646,7 @@ impl Bucket {
                 let is_branch = matches!(p.flags, Flags::BRANCHES);
                 if is_branch {
                     for i in 0..p.count as usize {
-                        let elem = p.branch_page_element(i);
+                        let elem = p.branch_page_element(i)?;
                         self.for_each_page_node_at(elem.pgid, depth + 1, handler)?;
                     }
                 }
@@ -816,10 +816,10 @@ impl Bucket {
         }
 
         if let Some(ref page) = self.page {
-            node.read(page);
+            node.read(page)?;
         } else {
             unsafe {
-                node.read(&*self.tx()?.page(pgid)?);
+                node.read(&*self.tx()?.page(pgid)?)?;
             }
         }
 
