@@ -133,7 +133,7 @@ struct DumpOptions {
 }
 
 fn dump(o: DumpOptions) -> Result<(), String> {
-    let mut file = std::fs::File::open(&o.path).unwrap();
+    let mut file = std::fs::File::open(&o.path).map_err(|_| "Can't open file")?;
     let page_size = DB::get_meta(&mut file)?.page_size;
     let offset = u64::from(page_size) * o.id as u64;
     let meta = file
@@ -241,7 +241,7 @@ fn info(o: InfoOptions) -> Result<(), String> {
             let mut count = 0;
             let mut bucket_keys = vec![];
             tx.for_each(Box::new(|key, bucket| -> Result<(), String> {
-                stats += bucket.unwrap().stats();
+                stats += bucket.ok_or("Not a bucket")?.stats();
                 bucket_keys.push(key.to_vec());
                 count += 1;
                 Ok(())
@@ -321,7 +321,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
             if overflowed.contains(&id) {
                 return Ok(None);
             }
-            let info = tx.page_info(id)?.unwrap();
+            let info = tx.page_info(id)?.ok_or(format!("Page {id} not found"))?;
             if info.overflow_count > 0 {
                 for i in 1..=info.overflow_count {
                     if info.overflow_count > 50 {
