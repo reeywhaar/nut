@@ -114,13 +114,35 @@ impl Node {
     ///
     /// returns None if no split occured, or parent Node otherwise
     pub(crate) fn split(&mut self, page_size: usize) -> Result<(Vec<Node>, Option<Node>), Error> {
+        let starts = self.split_starts(page_size)?;
+        if starts.is_empty() {
+            return Ok((vec![self.clone()], None));
+        }
+
+        let mut tails = Vec::with_capacity(starts.len());
+        {
+            let mut inodes = self.0.inodes.borrow_mut();
+            for &start in starts.iter().rev() {
+                tails.push(inodes.split_off(start));
+            }
+            inodes.shrink_to_fit();
+        }
         let mut nodes = vec![self.clone()];
-        while let Some(next) = nodes[nodes.len() - 1].clone().split_two(page_size)? {
+        for inodes in tails.into_iter().rev() {
+            let next = NodeBuilder::new(self.0.bucket)
+                .is_leaf(self.is_leaf())
+                .build();
+            *next.0.inodes.borrow_mut() = inodes;
             nodes.push(next);
         }
-        if nodes.len() == 1 {
-            return Ok((nodes, None));
-        }
+
+        self.bucket()
+            .ok_or("Bucket empty")?
+            .tx()?
+            .0
+            .stats
+            .lock()
+            .split += starts.len();
 
         let (parent, new_parent) = match self.parent() {
             Some(parent) => (parent, None),
@@ -140,44 +162,35 @@ impl Node {
         Ok((nodes, new_parent))
     }
 
-    /// Breaks up a node into two smaller nodes, if appropriate.
-    /// This should only be called from the split() function.
-    ///
-    /// Returns next node if splid did occur, or None if not
-    pub(super) fn split_two(&mut self, page_size: usize) -> Result<Option<Node>, Error> {
-        let split_index = {
-            if self.0.inodes.borrow().len() <= (MIN_KEYS_PER_PAGE * 2)
-                || self.size_less_than(page_size)
-            {
-                return Ok(None);
-            }
-
-            let fp = self
-                .bucket()
-                .ok_or("Bucket empty")?
-                .fill_percent
-                .clamp(Bucket::MIN_FILL_PERCENT, Bucket::MAX_FILL_PERCENT);
-            let threshold = (fp * page_size as f64) as usize;
-            let (split_index, _) = self.split_index(threshold);
-            split_index
+    /// Returns the index of the first inode of each node after the first one
+    /// that split() breaks this node into. Empty if no split should occur.
+    pub(super) fn split_starts(&self, page_size: usize) -> Result<Vec<usize>, Error> {
+        let inodes = self.0.inodes.borrow();
+        let splits = |start: usize| {
+            inodes.len() - start > MIN_KEYS_PER_PAGE * 2
+                && !self.size_less_than(&inodes[start..], page_size)
         };
 
-        let next = NodeBuilder::new(self.0.bucket)
-            .is_leaf(self.is_leaf())
-            .build();
-        let nodes = self.0.inodes.borrow_mut().drain(split_index..).collect();
-        // parent.0.children.borrow_mut().push(next.clone());
-        *next.0.inodes.borrow_mut() = nodes;
+        let mut starts = Vec::new();
+        if !splits(0) {
+            return Ok(starts);
+        }
 
-        self.bucket()
+        let fp = self
+            .bucket()
             .ok_or("Bucket empty")?
-            .tx()?
-            .0
-            .stats
-            .lock()
-            .split += 1;
-
-        Ok(Some(next))
+            .fill_percent
+            .clamp(Bucket::MIN_FILL_PERCENT, Bucket::MAX_FILL_PERCENT);
+        let threshold = (fp * page_size as f64) as usize;
+        let mut start = 0;
+        loop {
+            let (split_index, _) = self.split_index(&inodes[start..], threshold);
+            start += split_index;
+            starts.push(start);
+            if !splits(start) {
+                return Ok(starts);
+            }
+        }
     }
 
     /// Writes the nodes to dirty pages and splits nodes as it goes.
@@ -492,10 +505,10 @@ impl Node {
     /// Returns true if the node is less than a given size.
     /// This is an optimization to avoid calculating a large node when we only need
     /// to know if it fits inside a certain page size.
-    pub(super) fn size_less_than(&self, v: usize) -> bool {
+    pub(super) fn size_less_than(&self, inodes: &[INode], v: usize) -> bool {
         let mut sz = Page::header_size();
         let elsz = self.page_element_size();
-        for ind in &*self.0.inodes.borrow() {
+        for ind in inodes {
             sz += elsz + ind.key.len() + ind.value.len();
             if sz >= v {
                 return false;
@@ -673,11 +686,10 @@ impl Node {
     /// Finds the position where a page will fill a given threshold.
     /// It returns the index as well as the size of the first page.
     /// This is only be called from split().
-    pub(super) fn split_index(&self, threshold: usize) -> (usize, usize) {
+    pub(super) fn split_index(&self, inodes: &[INode], threshold: usize) -> (usize, usize) {
         let mut rindex = 0;
         let mut pgsize = Page::header_size();
 
-        let inodes = self.0.inodes.borrow();
         let pelsize = self.page_element_size();
         let max = inodes.len() - MIN_KEYS_PER_PAGE;
 

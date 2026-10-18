@@ -150,7 +150,7 @@ fn write_page() {
 }
 
 #[test]
-fn split_two() {
+fn split_starts() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
@@ -167,13 +167,13 @@ fn split_two() {
         .unwrap();
 
     // Split between 2 & 3.
-    let next = n.split_two(100).unwrap();
+    let starts = n.split_starts(100).unwrap();
 
-    assert!(next.is_some());
+    assert!(!starts.is_empty());
 }
 
 #[test]
-fn split_two_fail() {
+fn split_starts_none() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
@@ -190,9 +190,9 @@ fn split_two_fail() {
         .unwrap();
 
     // Split between 2 & 3.
-    let next = n.split_two(4096).unwrap();
+    let starts = n.split_starts(4096).unwrap();
 
-    assert!(next.is_none());
+    assert!(starts.is_empty());
 }
 
 #[test]
@@ -245,6 +245,34 @@ fn split_big() {
 
     assert_eq!(nodes.len(), 19);
     assert_eq!(parent.unwrap().0.children.borrow().len(), 19);
+}
+
+#[test]
+fn split_large_node_keeps_memory_linear() {
+    let tx = tx_mock();
+    let bucket = bucket_mock(WeakTx::from(&tx));
+    let mut n = node_mock(&raw const bucket);
+    n.0.is_leaf.store(true, Ordering::Release);
+    let count = 20_000;
+    for i in 0..count {
+        let key = format!("{i:08}");
+        n.put(key.as_bytes(), key.as_bytes(), vec![0; 100], 0, 0)
+            .unwrap();
+    }
+
+    let (nodes, _) = n.split(1024).unwrap();
+
+    assert!(nodes.len() > 1000);
+    let len: usize = nodes.iter().map(|n| n.0.inodes.borrow().len()).sum();
+    let capacity: usize = nodes.iter().map(|n| n.0.inodes.borrow().capacity()).sum();
+    assert_eq!(len, count);
+    assert!(
+        capacity < 2 * count,
+        "capacity {capacity} for {count} inodes"
+    );
+    for pair in nodes.windows(2) {
+        assert!(pair[0].0.inodes.borrow().last().unwrap().key < pair[1].0.inodes.borrow()[0].key);
+    }
 }
 
 #[test]
