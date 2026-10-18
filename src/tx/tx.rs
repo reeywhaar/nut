@@ -60,25 +60,18 @@ pub(crate) struct TxInner {
 
 impl fmt::Debug for TxInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let db = self
-            .db
-            .try_read()
-            .unwrap()
-            .upgrade()
-            .map(|db| &raw const db);
+        let db = self.db.try_read().map(|db| db.as_ptr());
+        let commit_handlers = self.commit_handlers.try_lock().map(|h| h.len());
 
         f.debug_struct("TxInner")
             .field("writable", &self.writable)
             .field("managed", &self.managed)
             .field("db", &db)
-            .field("meta", &*self.meta.try_read().unwrap())
-            .field("root", &*self.root.try_read().unwrap())
-            .field("pages", &*self.pages.try_read().unwrap())
-            .field("stats", &*self.stats.try_lock().unwrap())
-            .field(
-                "commit handlers len",
-                &self.commit_handlers.try_lock().unwrap().len(),
-            )
+            .field("meta", &self.meta)
+            .field("root", &self.root)
+            .field("pages", &self.pages)
+            .field("stats", &self.stats)
+            .field("commit handlers len", &commit_handlers)
             .field("write_flag", &self.write_flag)
             .finish()
     }

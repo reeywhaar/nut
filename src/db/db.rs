@@ -901,4 +901,8 @@ impl WeakDB {
     pub(crate) fn from(db: &DB) -> Self {
         Self(Arc::downgrade(&db.0))
     }
+
+    pub(crate) fn as_ptr(&self) -> *const () {
+        self.0.as_ptr().cast()
+    }
 }

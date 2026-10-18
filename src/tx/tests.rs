@@ -277,3 +277,16 @@ fn check_reports_errors_instead_of_panicking() {
 
     assert_eq!(errors, vec!["Lock failed: bucket".to_string()]);
 }
+
+#[test]
+fn debug_with_locked_fields() {
+    let db = db_mock().build().unwrap();
+    let tx = db.begin_tx().unwrap();
+
+    let inner = tx.0.clone();
+    let root = inner.root.write();
+    let debug = format!("{:?}", *inner);
+    drop(root);
+
+    assert!(debug.contains("root: RwLock { data: <locked>"), "{debug}");
+}
