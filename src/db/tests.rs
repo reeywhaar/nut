@@ -1,7 +1,11 @@
-use super::{CheckMode, DBBuilder};
+use super::common::{Batch, Call};
+use super::{CheckMode, DBBuilder, WeakDB};
 use crate::consts::{MAGIC, MAX_MAP_SIZE};
 use crate::errors::Error;
 use crate::test_utils::temp_file;
+use crate::tx::Tx;
+use std::sync::{Arc, mpsc};
+use std::time::Duration;
 
 #[expect(clippy::extra_unused_lifetimes)]
 pub(crate) fn db_mock<'a>() -> DBBuilder {
@@ -163,4 +167,68 @@ fn batch_returns_handler_error() {
 
     let result = db.batch(Box::new(|_tx| Err("Handler failed".to_string())));
     assert_eq!(result, Err(Error::Unexpected("Handler failed".to_string())));
+}
+
+fn batch_call(
+    handler: impl Fn(&mut Tx) -> Result<(), String> + Send + 'static,
+) -> (Call, mpsc::Receiver<Result<(), String>>) {
+    let (sender, receiver) = mpsc::channel();
+    (Call::new(Arc::new(Box::new(handler)), sender), receiver)
+}
+
+#[test]
+fn batch_run_retries_without_failed_call() {
+    let db = db_mock().build().unwrap();
+    let mut batch = Batch::new(WeakDB::from(&db), 0, Duration::from_secs(60));
+
+    let mut receivers = vec![];
+    for name in ["a", "fail", "c"] {
+        let (call, receiver) = batch_call(move |tx| {
+            if name == "fail" {
+                return Err("Handler failed".to_string());
+            }
+            let _ = tx.create_bucket(name.as_bytes())?;
+            Ok(())
+        });
+        batch.push(call).unwrap();
+        receivers.push(receiver);
+    }
+    batch.trigger();
+
+    let results: Vec<_> = receivers.iter().map(|r| r.recv().unwrap()).collect();
+    assert_eq!(
+        results,
+        vec![
+            Ok(()),
+            Err("Unexpected: Handler failed".to_string()),
+            Ok(())
+        ]
+    );
+
+    let tx = db.begin_tx().unwrap();
+    assert!(tx.bucket(b"a").is_ok());
+    assert!(tx.bucket(b"fail").is_err());
+    assert!(tx.bucket(b"c").is_ok());
+}
+
+#[test]
+fn batch_run_without_database() {
+    let mut batch = Batch::new(WeakDB::new(), 0, Duration::from_secs(60));
+    let (call, receiver) = batch_call(|_| Ok(()));
+    batch.push(call).unwrap();
+    batch.trigger();
+
+    assert_eq!(receiver.recv().unwrap(), Err("Database gone".to_string()));
+}
+
+#[test]
+fn batch_push_after_run() {
+    let mut batch = Batch::new(WeakDB::new(), 0, Duration::from_secs(60));
+    batch.trigger();
+
+    let (call, _receiver) = batch_call(|_| Ok(()));
+    assert_eq!(
+        batch.push(call),
+        Err(Error::Unexpected("Batch already run".to_string()))
+    );
 }
