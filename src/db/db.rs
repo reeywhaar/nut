@@ -235,7 +235,11 @@ impl<'a> DB {
     pub(crate) fn remove_tx(&mut self, tx: &Tx) -> Result<Tx, Error> {
         if tx.writable() {
             let (freelist_free_n, freelist_pending_n, freelist_alloc) = {
-                let freelist = self.0.freelist.try_read().unwrap();
+                let freelist = self
+                    .0
+                    .freelist
+                    .try_read()
+                    .ok_or_else(|| Error::lock("freelist"))?;
                 let freelist_free_n = freelist.free_count();
                 let freelist_pending_n = freelist.pending_count();
                 let freelist_alloc = freelist.size();
