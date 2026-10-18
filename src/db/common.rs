@@ -97,10 +97,17 @@ impl Batch {
     /// run performs the transactions in the batch and communicates results
     /// back to DB.Batch.
     fn run(&mut self) {
-        let mut db = self.0.db.upgrade().unwrap();
+        let Some(mut db) = self.0.db.upgrade() else {
+            for call in self.0.calls.lock().drain(..) {
+                call.err
+                    .send(Err(Error::DatabaseGone.to_string()))
+                    .expect("Batch caller dropped");
+            }
+            return;
+        };
         db.0.batch.lock().take();
 
-        let mut calls = self.0.calls.try_lock().unwrap();
+        let mut calls = self.0.calls.lock();
 
         while !calls.is_empty() {
             let mut last_call_id = 0;
@@ -112,12 +119,15 @@ impl Batch {
                 Ok(())
             })) {
                 let failed_call = calls.remove(last_call_id);
-                failed_call.err.send(Err(format!("{e}"))).unwrap();
+                failed_call
+                    .err
+                    .send(Err(format!("{e}")))
+                    .expect("Batch caller dropped");
                 continue;
             }
             {
                 for call in &*calls {
-                    call.err.send(Ok(())).unwrap();
+                    call.err.send(Ok(())).expect("Batch caller dropped");
                 }
                 break;
             }
