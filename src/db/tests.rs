@@ -1,5 +1,6 @@
 use super::{CheckMode, DBBuilder};
 use crate::consts::{MAGIC, MAX_MAP_SIZE};
+use crate::errors::Error;
 use crate::test_utils::temp_file;
 
 #[expect(clippy::extra_unused_lifetimes)]
@@ -148,4 +149,18 @@ fn batch() {
         Ok(())
     }))
     .unwrap();
+}
+
+#[test]
+fn batch_returns_handler_error() {
+    use std::time::Duration;
+
+    let mut db = db_mock()
+        .batch_delay(Duration::from_millis(10))
+        .batch_size(1)
+        .build()
+        .unwrap();
+
+    let result = db.batch(Box::new(|_tx| Err("Handler failed".to_string())));
+    assert_eq!(result, Err(Error::Unexpected("Handler failed".to_string())));
 }

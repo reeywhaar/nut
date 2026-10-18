@@ -604,11 +604,10 @@ impl<'a> DB {
             err_receiver
         };
 
-        if err_receiver.recv().is_err() {
-            return self.update(Box::new(|tx| handler(tx)));
+        match err_receiver.recv() {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(_)) | Err(_) => self.update(Box::new(|tx| handler(tx))),
         }
-
-        Ok(())
     }
 
     pub(crate) fn write_at<T: Read>(&mut self, pos: u64, mut buf: T) -> Result<(), Error> {
