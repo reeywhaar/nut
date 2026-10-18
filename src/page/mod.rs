@@ -81,6 +81,7 @@ impl Page {
         Error::corrupted(format!("Page {}: data out of bounds", self.id))
     }
 
+    #[inline]
     fn elements<T>(&self, count: usize) -> Result<&[T], Error> {
         if count
             .checked_mul(size_of::<T>())
@@ -101,6 +102,7 @@ impl Page {
         Ok(unsafe { std::slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<T>(), count) })
     }
 
+    #[inline]
     fn element_data(&self, elem_offset: usize, pos: u32, len: u32) -> Result<&[u8], Error> {
         elem_offset
             .checked_add(pos as usize)
@@ -196,6 +198,7 @@ impl Page {
     }
 
     /// Retrieves a list of branch nodes
+    #[inline]
     pub(crate) fn branch_page_elements(&self) -> Result<&[BranchPageElement], Error> {
         if self.flags != Flags::BRANCHES {
             return Err(Error::corrupted("Flags are not branches"));
@@ -212,6 +215,7 @@ impl Page {
     }
 
     /// Retrieves the branch node by index
+    #[inline]
     pub(crate) fn branch_page_element(&self, index: usize) -> Result<&BranchPageElement, Error> {
         self.branch_page_elements()?.get(index).ok_or_else(|| {
             Error::corrupted(format!("Page {}: element {index} out of range", self.id))
@@ -234,6 +238,7 @@ impl Page {
         self.branch_key_of(index, self.branch_page_element(index)?)
     }
 
+    #[inline]
     pub(crate) fn branch_key_of(
         &self,
         index: usize,
@@ -243,6 +248,7 @@ impl Page {
     }
 
     /// Retrieves a list of leaf nodes
+    #[inline]
     pub(crate) fn leaf_page_elements(&self) -> Result<&[LeafPageElement], Error> {
         if self.flags != Flags::LEAVES {
             return Err(Error::corrupted("Flags are not leaves"));
@@ -259,6 +265,7 @@ impl Page {
     }
 
     /// Retrieves the leaf node by index
+    #[inline]
     pub(crate) fn leaf_page_element(&self, index: usize) -> Result<&LeafPageElement, Error> {
         self.leaf_page_elements()?.get(index).ok_or_else(|| {
             Error::corrupted(format!("Page {}: element {index} out of range", self.id))
@@ -281,6 +288,7 @@ impl Page {
         self.leaf_key_of(index, self.leaf_page_element(index)?)
     }
 
+    #[inline]
     pub(crate) fn leaf_key_of(&self, index: usize, elem: &LeafPageElement) -> Result<&[u8], Error> {
         self.element_data(index * LeafPageElement::SIZE, elem.pos, elem.ksize)
     }
@@ -290,6 +298,7 @@ impl Page {
         self.leaf_value_of(index, self.leaf_page_element(index)?)
     }
 
+    #[inline]
     pub(crate) fn leaf_value_of(
         &self,
         index: usize,
