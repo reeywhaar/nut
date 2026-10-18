@@ -161,7 +161,7 @@ impl FreeList {
             self.ids.clear();
         } else {
             let ids = p.freelist()?;
-            self.ids = ids[idx..count].to_vec();
+            self.ids = ids[idx..idx + count].to_vec();
             self.ids.sort_unstable();
         }
 
@@ -187,9 +187,9 @@ impl FreeList {
             m.copy_from_slice(&self.get_pgids())
         } else {
             p.count = 0xFFFF;
+            unsafe { *p.get_data_mut_ptr().cast::<PGID>() = lenids as PGID };
             let m = p.freelist_mut()?;
-            m[0] = lenids as u64;
-            m.copy_from_slice(&self.get_pgids());
+            m[1..].copy_from_slice(&self.get_pgids());
         }
         Ok(())
     }

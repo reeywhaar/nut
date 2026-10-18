@@ -92,10 +92,15 @@ impl Page {
                     count,
                 )),
                 Flags::META => PageData::Meta(&*self.get_data_ptr().cast::<Meta>()),
-                Flags::FREELIST => PageData::Freelist(std::slice::from_raw_parts(
-                    self.get_data_ptr().cast::<PGID>(),
-                    count,
-                )),
+                Flags::FREELIST => {
+                    let ptr = self.get_data_ptr().cast::<PGID>();
+                    let len = if count == 0xFFFF {
+                        1 + *ptr as usize
+                    } else {
+                        count
+                    };
+                    PageData::Freelist(std::slice::from_raw_parts(ptr, len))
+                }
                 _ => return Err(format!("Unknown page type: {}", self.flags).into()),
             })
         }
@@ -115,10 +120,15 @@ impl Page {
                     count,
                 )),
                 Flags::META => PageData::Meta(&*self.get_data_mut_ptr().cast::<Meta>()),
-                Flags::FREELIST => PageData::Freelist(std::slice::from_raw_parts_mut(
-                    self.get_data_mut_ptr().cast::<PGID>(),
-                    count,
-                )),
+                Flags::FREELIST => {
+                    let ptr = self.get_data_mut_ptr().cast::<PGID>();
+                    let len = if count == 0xFFFF {
+                        1 + *ptr as usize
+                    } else {
+                        count
+                    };
+                    PageData::Freelist(std::slice::from_raw_parts_mut(ptr, len))
+                }
                 _ => return Err(format!("Unknown page type: {}", self.flags).into()),
             })
         }

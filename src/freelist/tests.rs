@@ -174,3 +174,20 @@ fn rollback_missing_cache_entry() {
         ))
     );
 }
+
+#[test]
+fn write_read_overflow() {
+    let ids: Vec<PGID> = (2..70_002).collect();
+    let mut fl = FreeList {
+        ids: ids.clone(),
+        ..Default::default()
+    };
+    let mut page = OwnedPage::new(fl.size());
+    fl.write(&mut page).unwrap();
+    assert_eq!(page.count, 0xFFFF);
+    assert_eq!(page.freelist().unwrap()[..2], [70_000, 2]);
+
+    let mut fl2 = FreeList::default();
+    fl2.read(&page).unwrap();
+    assert_eq!(fl2.ids, ids);
+}
