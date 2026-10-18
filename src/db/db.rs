@@ -680,7 +680,7 @@ impl<'a> DB {
         // If larger than 1GB then grow by 1GB at a time.
         let remainder = size % MAX_MMAP_STEP;
         if remainder > 0 {
-            size += MAX_MAP_SIZE - remainder;
+            size += MAX_MMAP_STEP - remainder;
         };
 
         // Ensure that the mmap size is a multiple of the page size.
