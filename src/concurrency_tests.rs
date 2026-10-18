@@ -9,10 +9,7 @@ fn perform_read(number_of_threads: usize, number_of_values: usize) {
         let mut bucket = tx.create_bucket(b"bucket").unwrap();
         for i in 10..10 + number_of_values {
             bucket
-                .put(
-                    format!("{i}").as_bytes(),
-                    format!("{}", i * 100000).into(),
-                )
+                .put(format!("{i}").as_bytes(), format!("{}", i * 100000).into())
                 .unwrap();
         }
     }

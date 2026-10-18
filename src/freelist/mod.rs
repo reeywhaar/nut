@@ -6,7 +6,7 @@ use std::mem::size_of;
 
 use crate::consts::{Flags, PGID, TXID};
 use crate::errors::Error;
-use crate::page::{merge_pgids, Page};
+use crate::page::{Page, merge_pgids};
 use crate::utils::find_contiguous;
 
 /// freelist represents a list of all pages that are available for allocation.

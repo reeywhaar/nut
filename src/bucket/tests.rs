@@ -44,8 +44,27 @@ fn create_nested_buckets() {
             .create_bucket(b"fooe")
             .unwrap();
 
-        assert!(tx
-            .bucket(b"foo")
+        assert!(
+            tx.bucket(b"foo")
+                .unwrap()
+                .bucket(b"foob")
+                .unwrap()
+                .bucket(b"fooc")
+                .unwrap()
+                .bucket(b"food")
+                .unwrap()
+                .bucket(b"fooe")
+                .is_some()
+        );
+
+        tx.commit().unwrap();
+        db.path().to_owned()
+    };
+
+    let db = db_mock().path(path).build().unwrap();
+    let tx = db.begin_tx().unwrap();
+    assert!(
+        tx.bucket(b"foo")
             .unwrap()
             .bucket(b"foob")
             .unwrap()
@@ -54,25 +73,8 @@ fn create_nested_buckets() {
             .bucket(b"food")
             .unwrap()
             .bucket(b"fooe")
-            .is_some());
-
-        tx.commit().unwrap();
-        db.path().to_owned()
-    };
-
-    let db = db_mock().path(path).build().unwrap();
-    let tx = db.begin_tx().unwrap();
-    assert!(tx
-        .bucket(b"foo")
-        .unwrap()
-        .bucket(b"foob")
-        .unwrap()
-        .bucket(b"fooc")
-        .unwrap()
-        .bucket(b"food")
-        .unwrap()
-        .bucket(b"fooe")
-        .is_some());
+            .is_some()
+    );
 }
 
 #[test]

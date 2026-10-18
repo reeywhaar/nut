@@ -1,6 +1,6 @@
 use either::Either;
 use std::cell::RefCell;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::fmt;
 
 use crate::consts::{Flags, PGID};
@@ -10,11 +10,11 @@ use crate::node::{Node, NodeBuilder, WeakNode};
 use crate::page::{BranchPageElement, LeafPageElement, OwnedPage, Page};
 use crate::tx::{Tx, WeakTx};
 
-use super::consts::*;
 use super::BucketStats;
 use super::Cursor;
 use super::IBucket;
 use super::PageNode;
+use super::consts::*;
 
 /// Bucket represents a collection of key/value pairs inside the database.
 pub struct Bucket {

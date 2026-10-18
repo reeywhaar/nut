@@ -3,7 +3,7 @@
 use anstyle::AnsiColor;
 use clap::{Args, Parser, Subcommand};
 use hexdump::{hexdump_iter, sanitize_byte};
-use nut::{Bucket, BucketStats, DBBuilder, FreedOrPageInfo, TxGuard, DB};
+use nut::{Bucket, BucketStats, DB, DBBuilder, FreedOrPageInfo, TxGuard};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 

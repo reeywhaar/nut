@@ -1,6 +1,6 @@
 use super::{Tx, TxBuilder};
-use crate::db::tests::db_mock;
 use crate::db::DBBuilder;
+use crate::db::tests::db_mock;
 use crate::errors::Error;
 use fnv::FnvHasher;
 use std::hash::Hasher;

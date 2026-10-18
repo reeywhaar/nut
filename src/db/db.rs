@@ -6,7 +6,7 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Weak};
+use std::sync::{Arc, Weak, mpsc};
 use std::time::Duration;
 
 use crate::bucket::IBucket;
@@ -469,7 +469,7 @@ impl<'a> DB {
         &mut self,
         mut handler: Box<dyn FnMut(&mut Tx) -> Result<(), String> + 'b>,
     ) -> Result<(), Error> {
-        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
 
         let mut tx = scopeguard::guard(self.begin_rw_tx()?, |tx| {
             let db_exists = tx.db().is_ok();
@@ -504,7 +504,7 @@ impl<'a> DB {
         &self,
         handler: Box<dyn Fn(&Tx) -> Result<(), String> + 'b>,
     ) -> Result<(), Error> {
-        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
 
         let tx = scopeguard::guard(self.begin_tx()?, |tx| {
             let db_exists = tx.db().is_ok();

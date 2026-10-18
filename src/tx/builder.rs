@@ -1,7 +1,7 @@
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use crate::bucket::Bucket;
 use crate::db::WeakDB;

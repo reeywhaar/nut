@@ -1,4 +1,4 @@
-use rand::{distr::Alphanumeric, rng, RngExt};
+use rand::{RngExt, distr::Alphanumeric, rng};
 use std::env::temp_dir;
 use std::path::PathBuf;
 

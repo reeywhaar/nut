@@ -1,10 +1,10 @@
 use std::sync::atomic::Ordering;
 
-use crate::bucket::{tests::bucket_mock, Bucket};
+use crate::bucket::{Bucket, tests::bucket_mock};
 use crate::consts::Flags;
 use crate::page::{LeafPageElement, OwnedPage};
-use crate::tx::tests::tx_mock;
 use crate::tx::WeakTx;
+use crate::tx::tests::tx_mock;
 
 use super::{Node, NodeBuilder};
 

@@ -282,11 +282,7 @@ impl Node {
                 None => None,
                 Some(p) => {
                     let pgid_valid = *p.0.pgid.borrow() == 0;
-                    if pgid_valid {
-                        Some(p)
-                    } else {
-                        None
-                    }
+                    if pgid_valid { Some(p) } else { None }
                 }
             };
             if let Some(parent) = spill_parent {
@@ -496,11 +492,7 @@ impl Node {
     }
 
     pub fn min_keys(&self) -> u8 {
-        if self.is_leaf() {
-            1
-        } else {
-            2
-        }
+        if self.is_leaf() { 1 } else { 2 }
     }
 
     /// Returns the size of each page element based on the type of node.

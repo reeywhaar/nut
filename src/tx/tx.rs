@@ -4,15 +4,15 @@ use parking_lot::{
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::OpenOptions;
-use std::io::{copy, Cursor as IOCursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor as IOCursor, Read, Seek, SeekFrom, Write, copy};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Weak};
+use std::sync::{Arc, Weak, mpsc};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
 use crate::bucket::{Bucket, Cursor};
 use crate::consts::{Flags, IGNORE_NOSYNC, PGID, TXID};
-use crate::db::{CheckMode, WeakDB, DB};
+use crate::db::{CheckMode, DB, WeakDB};
 use crate::errors::Error;
 use crate::meta::Meta;
 use crate::page::{OwnedPage, Page, PageInfo};
@@ -588,8 +588,7 @@ impl Tx {
             for i in 0..=p.overflow {
                 let id = p.id + u64::from(i);
                 if reachable.contains_key(&id) {
-                    ch.send(format!("page {id}: multiple references"))
-                        .unwrap();
+                    ch.send(format!("page {id}: multiple references")).unwrap();
                 }
                 reachable.insert(id, true);
             }

@@ -1,4 +1,4 @@
-use super::{leaf_page_element::LeafPageElement, OwnedPage, Page, PageData};
+use super::{OwnedPage, Page, PageData, leaf_page_element::LeafPageElement};
 use crate::consts::{Flags, PGID};
 
 #[test]
