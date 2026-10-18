@@ -169,7 +169,7 @@ impl<'a> DB {
             db.0.freelist
                 .try_write()
                 .ok_or_else(|| Error::lock("freelist"))?
-                .read(&freelist_page);
+                .read(&freelist_page)?;
         }
 
         Ok(db)
@@ -814,7 +814,7 @@ impl<'a> DB {
         p.overflow = count as u32 - 1;
 
         {
-            let freelist_pid = self.0.freelist.write().allocate(count);
+            let freelist_pid = self.0.freelist.write().allocate(count)?;
             if freelist_pid != 0 {
                 p.id = freelist_pid;
                 return Ok(p);

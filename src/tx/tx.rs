@@ -531,10 +531,10 @@ impl Tx {
         if self.writable() {
             let txid = self.id()?;
             let mut freelist = db.0.freelist.write();
-            freelist.rollback(txid);
+            freelist.rollback(txid)?;
             let freelist_id = db.meta()?.freelist;
             let freelist_page = db.page(freelist_id);
-            freelist.reload(&freelist_page);
+            freelist.reload(&freelist_page)?;
         };
         self.close()?;
         Ok(())

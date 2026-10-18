@@ -1,5 +1,6 @@
 use super::FreeList;
 use crate::consts::{Flags, PGID};
+use crate::errors::Error;
 use crate::page::{OwnedPage, PageData};
 
 #[test]
@@ -73,25 +74,25 @@ fn allocate() {
         ..Default::default()
     };
 
-    assert_eq!(3, f.allocate(3));
+    assert_eq!(Ok(3), f.allocate(3));
     assert_eq!(vec![6, 7, 9, 12, 13, 18], f.ids);
-    assert_eq!(6, f.allocate(1));
+    assert_eq!(Ok(6), f.allocate(1));
     assert_eq!(vec![7, 9, 12, 13, 18], f.ids);
-    assert_eq!(0, f.allocate(3));
+    assert_eq!(Ok(0), f.allocate(3));
     assert_eq!(vec![7, 9, 12, 13, 18], f.ids);
-    assert_eq!(12, f.allocate(2));
+    assert_eq!(Ok(12), f.allocate(2));
     assert_eq!(vec![7, 9, 18], f.ids);
-    assert_eq!(7, f.allocate(1));
+    assert_eq!(Ok(7), f.allocate(1));
     assert_eq!(vec![9, 18], f.ids);
-    assert_eq!(0, f.allocate(0));
+    assert_eq!(Ok(0), f.allocate(0));
     assert_eq!(vec![9, 18], f.ids);
-    assert_eq!(0, f.allocate(0));
+    assert_eq!(Ok(0), f.allocate(0));
     assert_eq!(vec![9, 18], f.ids);
-    assert_eq!(9, f.allocate(1));
+    assert_eq!(Ok(9), f.allocate(1));
     assert_eq!(vec![18], f.ids);
-    assert_eq!(18, f.allocate(1));
+    assert_eq!(Ok(18), f.allocate(1));
     assert_eq!(Vec::<PGID>::new(), f.ids);
-    assert_eq!(0, f.allocate(1));
+    assert_eq!(Ok(0), f.allocate(1));
     assert_eq!(Vec::<PGID>::new(), f.ids);
 }
 
@@ -109,7 +110,7 @@ fn read() {
 
     // Deserialize page into a freelist.
     let mut f = FreeList::default();
-    f.read(&page);
+    f.read(&page).unwrap();
 
     assert_eq!(&[23 as PGID, 50], f.ids.as_slice());
 }
@@ -134,7 +135,42 @@ fn write() {
     fl.write(&mut page);
 
     let mut fl2 = FreeList::default();
-    fl2.read(&page);
+    fl2.read(&page).unwrap();
 
     assert_eq!(vec![3, 11, 12, 28, 39], fl2.ids);
+}
+
+#[test]
+fn allocate_meta_page() {
+    let mut f = FreeList {
+        ids: vec![1, 2, 3],
+        ..Default::default()
+    };
+    assert_eq!(
+        f.allocate(1),
+        Err(Error::Unexpected("Invalid page allocation: 1".to_string()))
+    );
+}
+
+#[test]
+fn read_wrong_page_type() {
+    let mut page = OwnedPage::new(1024);
+    page.flags = Flags::LEAVES;
+    let mut f = FreeList::default();
+    assert_eq!(
+        f.read(&page),
+        Err(Error::Unexpected("Freelist flags incorrect: 2".to_string()))
+    );
+}
+
+#[test]
+fn rollback_missing_cache_entry() {
+    let mut f = FreeList::default();
+    f.pending.insert(1, vec![5]);
+    assert_eq!(
+        f.rollback(1),
+        Err(Error::Unexpected(
+            "Pending page 5 missing from cache".to_string()
+        ))
+    );
 }

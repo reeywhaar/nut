@@ -58,24 +58,24 @@ impl FreeList {
 
     /// allocate returns the starting page id of a contiguous list of pages of a given size.
     /// If a contiguous block cannot be found then 0 is returned.
-    pub fn allocate(&mut self, span: u64) -> PGID {
+    pub fn allocate(&mut self, span: u64) -> Result<PGID, Error> {
         if self.ids.is_empty() {
-            return 0;
+            return Ok(0);
         }
 
         if let Some(index) = find_contiguous(&self.ids, span as usize) {
             let pgid = self.ids[index];
             if pgid <= 1 {
-                panic!("invalid page allocation: {}", pgid);
+                return Err(format!("Invalid page allocation: {pgid}").into());
             };
             self.ids.drain(index..index + span as usize);
             // Remove from the free cache.
             for i in 0..span {
                 self.cache.remove(&(pgid + i));
             }
-            pgid
+            Ok(pgid)
         } else {
-            0
+            Ok(0)
         }
     }
 
@@ -124,16 +124,19 @@ impl FreeList {
     }
 
     /// release moves all page ids for a transaction id (or older) to the freelist.
-    pub fn rollback(&mut self, txid: TXID) {
+    pub fn rollback(&mut self, txid: TXID) -> Result<(), Error> {
         // Remove page ids from cache.
         if let Some(pending) = self.pending.get(&txid) {
             for id in pending {
-                self.cache.remove(id).unwrap();
+                self.cache
+                    .remove(id)
+                    .ok_or_else(|| format!("Pending page {id} missing from cache"))?;
             }
         }
 
         // Remove pages from pending list.
         self.pending.remove(&txid);
+        Ok(())
     }
 
     /// freed returns whether a given page is in the free list.
@@ -142,13 +145,10 @@ impl FreeList {
     }
 
     /// read initializes the freelist from a freelist page.
-    pub(crate) fn read(&mut self, p: &Page) {
-        assert_eq!(
-            p.flags,
-            Flags::FREELIST,
-            "freelist flags incorrect: {}",
-            p.flags.bits()
-        );
+    pub(crate) fn read(&mut self, p: &Page) -> Result<(), Error> {
+        if p.flags != Flags::FREELIST {
+            return Err(format!("Freelist flags incorrect: {}", p.flags.bits()).into());
+        }
         let mut idx = 0;
         let mut count = p.count as usize;
         if count == 0xFFFF {
@@ -166,6 +166,7 @@ impl FreeList {
         }
 
         self.reindex();
+        Ok(())
     }
 
     /// write writes the page ids onto a freelist page. All free and pending ids are
@@ -193,8 +194,8 @@ impl FreeList {
     }
 
     /// reload reads the freelist from a page and filters out pending items.
-    pub fn reload(&mut self, p: &Page) {
-        self.read(p);
+    pub fn reload(&mut self, p: &Page) -> Result<(), Error> {
+        self.read(p)?;
 
         let mut pcache = Vec::<PGID>::new();
         for pids in self.pending.values() {
@@ -214,6 +215,7 @@ impl FreeList {
         self.ids = a;
 
         self.reindex();
+        Ok(())
     }
 
     pub fn reindex(&mut self) {
