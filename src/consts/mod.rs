@@ -7,10 +7,10 @@ pub(crate) const MAX_MAP_SIZE: u64 = 0x0FFF_FFFF;
 
 pub(crate) const MIN_KEYS_PER_PAGE: usize = 2;
 
-#[allow(clippy::upper_case_acronyms)]
+#[expect(clippy::upper_case_acronyms)]
 pub(crate) type PGID = u64;
 
-#[allow(clippy::upper_case_acronyms)]
+#[expect(clippy::upper_case_acronyms)]
 pub(crate) type TXID = u64;
 
 pub(crate) const MAX_MMAP_STEP: u64 = 1 << 30;

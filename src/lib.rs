@@ -91,7 +91,7 @@
 //! }
 //! ```
 
-#![allow(clippy::cast_ptr_alignment, clippy::module_inception)]
+#![expect(clippy::cast_ptr_alignment, clippy::module_inception)]
 
 #[cfg(test)]
 mod test_utils;

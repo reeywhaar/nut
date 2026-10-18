@@ -26,7 +26,7 @@ impl<'a> fmt::Display for PageData<'a> {
 }
 
 impl<'a> PageData<'a> {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) fn typ(&self) -> Flags {
         match self {
             PageData::Branches(_) => Flags::BRANCHES,

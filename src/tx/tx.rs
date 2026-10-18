@@ -233,7 +233,7 @@ impl Tx {
         self.0.root.try_write().unwrap().delete_bucket(key)
     }
 
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     /// Executes a function for each bucket in the root.
     /// If the provided function returns an error then the iteration is stopped and
     /// the error is returned to the caller.

@@ -1,4 +1,4 @@
-#![allow(clippy::zero_prefixed_literal)]
+#![expect(clippy::zero_prefixed_literal)]
 
 use std::error::Error as RError;
 use std::fmt;

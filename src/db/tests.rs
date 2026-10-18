@@ -2,7 +2,7 @@ use super::{CheckMode, DBBuilder};
 use crate::consts::MAGIC;
 use crate::test_utils::temp_file;
 
-#[allow(clippy::extra_unused_lifetimes)]
+#[expect(clippy::extra_unused_lifetimes)]
 pub(crate) fn db_mock<'a>() -> DBBuilder {
     DBBuilder::new(temp_file())
         .autoremove(true)

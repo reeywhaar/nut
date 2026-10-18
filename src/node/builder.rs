@@ -24,7 +24,7 @@ impl NodeBuilder {
         }
     }
 
-    #[allow(clippy::wrong_self_convention)]
+    #[expect(clippy::wrong_self_convention)]
     pub(crate) fn is_leaf(mut self, value: bool) -> Self {
         self.is_leaf = value;
         self
@@ -40,7 +40,7 @@ impl NodeBuilder {
         self
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) fn bucket(mut self, value: *const Bucket) -> Self {
         self.bucket = Some(value);
         self

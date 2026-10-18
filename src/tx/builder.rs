@@ -48,7 +48,7 @@ impl TxBuilder {
             meta.txid += 1;
         };
 
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[expect(clippy::arc_with_non_send_sync)]
         let tx = Tx(Arc::new(TxInner {
             writable: self.writable,
             managed: AtomicBool::new(false),

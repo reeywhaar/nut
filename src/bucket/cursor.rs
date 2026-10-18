@@ -43,7 +43,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Returns mutable reference to bucket which is cursor created from
     pub(crate) fn bucket_mut(&mut self) -> &mut Bucket {
         unsafe {
-            #[allow(invalid_reference_casting)]
+            #[expect(invalid_reference_casting)]
             &mut *((&*self.bucket) as *const Bucket as *mut Bucket)
         }
     }

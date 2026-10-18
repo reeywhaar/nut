@@ -9,14 +9,14 @@ use crate::tx::Tx;
 
 use super::WeakDB;
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub(super) struct Call {
     h: Arc<Box<dyn Fn(&mut Tx) -> Result<(), String> + Send>>,
     err: mpsc::Sender<Result<(), String>>,
 }
 
 impl Call {
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub(super) fn new(
         func: Arc<Box<dyn Fn(&mut Tx) -> Result<(), String> + Send>>,
         err_ch: mpsc::Sender<Result<(), String>>,
@@ -43,7 +43,7 @@ unsafe impl Sync for Batch {}
 
 impl Batch {
     pub(super) fn new(db: WeakDB, calls_len: usize, delay: Duration) -> Self {
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[expect(clippy::arc_with_non_send_sync)]
         let batch = Batch(Arc::new(BatchInner {
             db,
             calls_len,

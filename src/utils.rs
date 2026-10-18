@@ -43,18 +43,17 @@ pub unsafe fn slice_to_u8_slice<T: Sized>(p: &[T]) -> &[u8] {
 }
 
 /// converts any to bytes slice
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub unsafe fn to_u8_slice_mut<T: Sized>(p: &mut T) -> &mut [u8] {
     unsafe { from_raw_parts_mut((p as *mut T) as *mut u8, size_of::<T>()) }
 }
 
 /// converts any to bytes slice
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub unsafe fn slice_to_u8_slice_mut<T: Sized>(p: &mut [T]) -> &mut [u8] {
     unsafe { from_raw_parts_mut(p.as_mut_ptr() as *mut u8, std::mem::size_of_val(p)) }
 }
 
-#[allow(dead_code)]
 pub fn is_aligned<T>(ptr: *const T) -> bool {
     (ptr as usize).is_multiple_of(align_of::<T>())
 }
@@ -62,7 +61,7 @@ pub fn is_aligned<T>(ptr: *const T) -> bool {
 /// dump writes n bytes of the page to STDERR as hex output.
 ///
 /// passing 0 as max will print entire struct
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn hexdump<T: Sized>(input: &T, max: usize) {
     let vsize = size_of_val(input);
     let size = if max == 0 {
@@ -77,7 +76,7 @@ pub fn hexdump<T: Sized>(input: &T, max: usize) {
 /// dump writes n bytes of the page to STDERR as hex output.
 ///
 /// passing 0 as max will print entire struct
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn hexdump_slice<T: Sized>(input: &[T], max: usize) {
     let buf = unsafe { from_raw_parts(input.as_ptr() as *const u8, max) };
     eprintln!("{:x?}", buf);

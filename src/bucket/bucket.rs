@@ -469,7 +469,7 @@ impl Bucket {
         Ok(())
     }
 
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     /// Executes a function for each key/value pair in a bucket.
     /// If the provided function returns an error then the iteration is stopped and
     /// the error is returned to the caller.

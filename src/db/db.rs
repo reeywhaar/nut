@@ -559,7 +559,7 @@ impl<'a> DB {
         handler: Box<dyn Fn(&mut Tx) -> Result<(), String> + Send>,
     ) -> Result<(), Error> {
         let weak_db = WeakDB::from(self);
-        #[allow(clippy::arc_with_non_send_sync)]
+        #[expect(clippy::arc_with_non_send_sync)]
         let handler = Arc::new(handler);
         let handler_clone = handler.clone();
 
