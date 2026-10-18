@@ -323,10 +323,10 @@ fn pages(o: PagesOptions) -> Result<(), String> {
             }
             let info = tx.page_info(id)?.ok_or(format!("Page {id} not found"))?;
             if info.overflow_count > 0 {
+                if tx.page_info(id + info.overflow_count)?.is_none() {
+                    return Err(format!("Page {id}: overflow out of bounds"));
+                }
                 for i in 1..=info.overflow_count {
-                    if info.overflow_count > 50 {
-                        panic!("OVERFLOW");
-                    };
                     overflowed.push(id + i);
                 }
             }
