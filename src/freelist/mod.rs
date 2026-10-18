@@ -2,7 +2,6 @@
 pub mod tests;
 
 use std::collections::HashMap;
-use std::mem::size_of;
 
 use crate::consts::{Flags, PGID, TXID};
 use crate::errors::Error;

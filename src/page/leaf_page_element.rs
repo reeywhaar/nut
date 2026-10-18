@@ -1,5 +1,4 @@
 use crate::utils::is_aligned;
-use std::mem::size_of;
 
 /// LeafPageElement represents a node on a leaf page.
 #[derive(Debug)]

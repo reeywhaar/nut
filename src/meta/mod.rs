@@ -64,7 +64,7 @@ impl Default for Meta {
 }
 
 impl Meta {
-    pub(crate) const SIZE: usize = std::mem::size_of::<Self>();
+    pub(crate) const SIZE: usize = size_of::<Self>();
 
     pub fn validate(&self) -> Result<(), Error> {
         if self.magic != MAGIC {

@@ -15,7 +15,7 @@ pub struct IBucket {
 }
 
 impl IBucket {
-    pub(crate) const SIZE: usize = std::mem::size_of::<Self>();
+    pub(crate) const SIZE: usize = size_of::<Self>();
 
     pub(crate) fn new() -> IBucket {
         IBucket {

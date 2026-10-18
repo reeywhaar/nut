@@ -146,7 +146,7 @@ impl Page {
                 size += Meta::SIZE;
             }
             PageData::Freelist(f) => {
-                size += std::mem::size_of_val(f);
+                size += size_of_val(f);
             }
         }
         size

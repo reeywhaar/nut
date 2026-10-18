@@ -1,4 +1,3 @@
-use std::mem::{align_of, size_of, size_of_val};
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
 /// finds continuous block in sorted vector
@@ -39,7 +38,7 @@ pub unsafe fn to_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 /// converts any to bytes slice
 pub unsafe fn slice_to_u8_slice<T: Sized>(p: &[T]) -> &[u8] {
-    unsafe { from_raw_parts(p.as_ptr().cast::<u8>(), std::mem::size_of_val(p)) }
+    unsafe { from_raw_parts(p.as_ptr().cast::<u8>(), size_of_val(p)) }
 }
 
 /// converts any to bytes slice
@@ -51,7 +50,7 @@ pub unsafe fn to_u8_slice_mut<T: Sized>(p: &mut T) -> &mut [u8] {
 /// converts any to bytes slice
 #[expect(dead_code)]
 pub unsafe fn slice_to_u8_slice_mut<T: Sized>(p: &mut [T]) -> &mut [u8] {
-    unsafe { from_raw_parts_mut(p.as_mut_ptr().cast::<u8>(), std::mem::size_of_val(p)) }
+    unsafe { from_raw_parts_mut(p.as_mut_ptr().cast::<u8>(), size_of_val(p)) }
 }
 
 pub fn is_aligned<T>(ptr: *const T) -> bool {

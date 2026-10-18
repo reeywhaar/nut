@@ -1,6 +1,5 @@
 use crate::consts::PGID;
 use crate::utils::is_aligned;
-use std::mem::size_of;
 
 /// BranchPageElement represents a node on a branch page.
 #[derive(Debug)]
