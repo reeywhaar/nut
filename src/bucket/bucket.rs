@@ -277,7 +277,7 @@ impl Bucket {
         let mut c = self.cursor()?;
         {
             let item = c.seek(key)?;
-            if item.key.unwrap() != key {
+            if item.key != Some(key) {
                 return Err(Error::BucketNotFound);
             }
             if !item.is_bucket() {

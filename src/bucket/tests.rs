@@ -103,3 +103,12 @@ fn delete_bucket_err() {
     }
     tx.commit().unwrap();
 }
+
+#[test]
+fn delete_missing_bucket_after_last_key() {
+    let mut db = db_mock().build().unwrap();
+    let mut tx = db.begin_rw_tx().unwrap();
+    let mut root = tx.create_bucket(b"root").unwrap();
+    root.create_bucket(b"a").unwrap();
+    assert_eq!(root.delete_bucket(b"b"), Err(Error::BucketNotFound));
+}
