@@ -34,24 +34,24 @@ pub fn find_contiguous(arr: &[u64], len: usize) -> Option<usize> {
 
 /// converts any to bytes slice
 pub unsafe fn to_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    unsafe { from_raw_parts((p as *const T) as *const u8, size_of::<T>()) }
+    unsafe { from_raw_parts((p as *const T).cast::<u8>(), size_of::<T>()) }
 }
 
 /// converts any to bytes slice
 pub unsafe fn slice_to_u8_slice<T: Sized>(p: &[T]) -> &[u8] {
-    unsafe { from_raw_parts(p.as_ptr() as *const u8, std::mem::size_of_val(p)) }
+    unsafe { from_raw_parts(p.as_ptr().cast::<u8>(), std::mem::size_of_val(p)) }
 }
 
 /// converts any to bytes slice
 #[expect(dead_code)]
 pub unsafe fn to_u8_slice_mut<T: Sized>(p: &mut T) -> &mut [u8] {
-    unsafe { from_raw_parts_mut((p as *mut T) as *mut u8, size_of::<T>()) }
+    unsafe { from_raw_parts_mut((p as *mut T).cast::<u8>(), size_of::<T>()) }
 }
 
 /// converts any to bytes slice
 #[expect(dead_code)]
 pub unsafe fn slice_to_u8_slice_mut<T: Sized>(p: &mut [T]) -> &mut [u8] {
-    unsafe { from_raw_parts_mut(p.as_mut_ptr() as *mut u8, std::mem::size_of_val(p)) }
+    unsafe { from_raw_parts_mut(p.as_mut_ptr().cast::<u8>(), std::mem::size_of_val(p)) }
 }
 
 pub fn is_aligned<T>(ptr: *const T) -> bool {
@@ -78,7 +78,7 @@ pub fn hexdump<T: Sized>(input: &T, max: usize) {
 /// passing 0 as max will print entire struct
 #[expect(dead_code)]
 pub fn hexdump_slice<T: Sized>(input: &[T], max: usize) {
-    let buf = unsafe { from_raw_parts(input.as_ptr() as *const u8, max) };
+    let buf = unsafe { from_raw_parts(input.as_ptr().cast::<u8>(), max) };
     eprintln!("{:x?}", buf);
 }
 

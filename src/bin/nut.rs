@@ -149,7 +149,7 @@ fn dump(o: DumpOptions) -> Result<(), String> {
         .map_err(|_| "Can't seek file")?;
     file.read_exact(&mut overflowbuf)
         .map_err(|_| "Can't read file")?;
-    let overflow = unsafe { *(&overflowbuf[0] as *const u8 as *const u32) };
+    let overflow = unsafe { *(&raw const overflowbuf[0]).cast::<u32>() };
     let mut take = (u64::from(overflow) + 1) * u64::from(page_size);
     if let Some(len) = o.len {
         take = u64::min(take, len);

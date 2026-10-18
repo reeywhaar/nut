@@ -19,7 +19,7 @@ impl LeafPageElement {
     pub fn key(&self) -> &[u8] {
         debug_assert!(is_aligned(self));
         unsafe {
-            let optr = self as *const Self as *const u8;
+            let optr = (self as *const Self).cast::<u8>();
             let ptr = optr.add(self.pos as usize);
             std::slice::from_raw_parts(ptr, self.ksize as usize)
         }
@@ -30,7 +30,9 @@ impl LeafPageElement {
         debug_assert!(is_aligned(self));
         unsafe {
             std::slice::from_raw_parts(
-                (self as *const Self as *const u8).add((self.pos + self.ksize) as usize),
+                (self as *const Self)
+                    .cast::<u8>()
+                    .add((self.pos + self.ksize) as usize),
                 self.vsize as usize,
             )
         }

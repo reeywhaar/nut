@@ -20,7 +20,7 @@ impl BranchPageElement {
         debug_assert!(is_aligned(self));
         unsafe {
             std::slice::from_raw_parts(
-                (self as *const Self as *const u8).add(self.pos as usize),
+                (self as *const Self).cast::<u8>().add(self.pos as usize),
                 self.ksize as usize,
             )
         }

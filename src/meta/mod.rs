@@ -105,7 +105,10 @@ impl Meta {
     pub fn sum64(&self) -> u64 {
         let mut h = FnvHasher::default();
         let bytes = unsafe {
-            std::slice::from_raw_parts(self as *const Self as *const u8, offset_of!(Meta, checksum))
+            std::slice::from_raw_parts(
+                (self as *const Self).cast::<u8>(),
+                offset_of!(Meta, checksum),
+            )
         };
         h.write(bytes);
         h.finish()

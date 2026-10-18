@@ -192,11 +192,11 @@ impl<'a> DB {
             .map_err(|_| "Can't seek file".to_string())?;
         file.read_exact(&mut buf)
             .map_err(|_| "Can't read file to buffer".to_string())?;
-        let magic: u32 = unsafe { *(&buf[0] as *const u8 as *const u32) };
+        let magic: u32 = unsafe { *(&raw const buf[0]).cast::<u32>() };
         if magic != MAGIC {
             return Err("Incorrect header".to_string());
         };
-        let page_size: u32 = unsafe { *(&buf[8] as *const u8 as *const u32) };
+        let page_size: u32 = unsafe { *(&raw const buf[8]).cast::<u32>() };
         let page_size = page_size as usize;
         file.seek(SeekFrom::Start(0))
             .map_err(|_| "Can't seek file".to_string())?;
@@ -204,8 +204,8 @@ impl<'a> DB {
         file.read_exact(&mut metabuf)
             .map_err(|_| "Can't read file to buffer".to_string())?;
 
-        let metap0 = unsafe { &*(&metabuf[0] as *const u8 as *const Page) };
-        let metap1 = unsafe { &*(&metabuf[page_size] as *const u8 as *const Page) };
+        let metap0 = unsafe { &*(&raw const metabuf[0]).cast::<Page>() };
+        let metap1 = unsafe { &*(&raw const metabuf[page_size]).cast::<Page>() };
 
         let (mut meta0, mut meta1) = (metap0.meta(), metap1.meta());
         if meta1.txid > meta0.txid {

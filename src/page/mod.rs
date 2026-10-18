@@ -48,7 +48,7 @@ impl fmt::Debug for Page {
             .field("flags", &self.flags)
             .field("count", &self.count)
             .field("overflow", &self.overflow)
-            .field("ptr", &(&self.ptr as *const PhantomData<u8>))
+            .field("ptr", &(&raw const self.ptr))
             .finish()
     }
 }
@@ -59,23 +59,23 @@ impl Page {
     }
 
     pub(crate) fn from_buf(buf: &[u8]) -> &Page {
-        unsafe { &*(buf.as_ptr() as *const Page) }
+        unsafe { &*buf.as_ptr().cast::<Page>() }
     }
 
     pub(crate) fn from_buf_mut(buf: &mut [u8]) -> &mut Page {
-        unsafe { &mut *(buf.as_mut_ptr() as *mut Page) }
+        unsafe { &mut *buf.as_mut_ptr().cast::<Page>() }
     }
 
     /// Returns pointer to page structure
     #[inline]
     pub(crate) fn get_data_ptr(&self) -> *const u8 {
-        &self.ptr as *const PhantomData<u8> as *const u8
+        (&raw const self.ptr).cast::<u8>()
     }
 
     /// Returns pointer to page structure
     #[inline]
     pub(crate) fn get_data_mut_ptr(&mut self) -> *mut u8 {
-        &mut self.ptr as *mut PhantomData<u8> as *mut u8
+        (&raw mut self.ptr).cast::<u8>()
     }
 
     pub(crate) fn data(&self) -> PageData<'_> {
@@ -83,16 +83,16 @@ impl Page {
         unsafe {
             match self.flags {
                 Flags::BRANCHES => PageData::Branches(std::slice::from_raw_parts(
-                    self.get_data_ptr() as *const BranchPageElement,
+                    self.get_data_ptr().cast::<BranchPageElement>(),
                     count,
                 )),
                 Flags::LEAVES => PageData::Leaves(std::slice::from_raw_parts(
-                    self.get_data_ptr() as *const LeafPageElement,
+                    self.get_data_ptr().cast::<LeafPageElement>(),
                     count,
                 )),
-                Flags::META => PageData::Meta(&*(self.get_data_ptr() as *const Meta)),
+                Flags::META => PageData::Meta(&*self.get_data_ptr().cast::<Meta>()),
                 Flags::FREELIST => PageData::Freelist(std::slice::from_raw_parts(
-                    self.get_data_ptr() as *const PGID,
+                    self.get_data_ptr().cast::<PGID>(),
                     count,
                 )),
                 _ => panic!("unknown flag"),
@@ -106,16 +106,16 @@ impl Page {
         unsafe {
             match self.flags {
                 Flags::BRANCHES => PageData::Branches(std::slice::from_raw_parts(
-                    self.get_data_mut_ptr() as *mut BranchPageElement,
+                    self.get_data_mut_ptr().cast::<BranchPageElement>(),
                     count,
                 )),
                 Flags::LEAVES => PageData::Leaves(std::slice::from_raw_parts(
-                    self.get_data_mut_ptr() as *mut LeafPageElement,
+                    self.get_data_mut_ptr().cast::<LeafPageElement>(),
                     count,
                 )),
-                Flags::META => PageData::Meta(&*(self.get_data_mut_ptr() as *mut Meta)),
+                Flags::META => PageData::Meta(&*self.get_data_mut_ptr().cast::<Meta>()),
                 Flags::FREELIST => PageData::Freelist(std::slice::from_raw_parts_mut(
-                    self.get_data_mut_ptr() as *mut PGID,
+                    self.get_data_mut_ptr().cast::<PGID>(),
                     count,
                 )),
                 _ => panic!("unknown flag"),
@@ -283,7 +283,7 @@ impl ToOwned for Page {
     type Owned = OwnedPage;
 
     fn to_owned(&self) -> OwnedPage {
-        let ptr = self as *const Page as *const u8;
+        let ptr = (self as *const Page).cast::<u8>();
         unsafe {
             let slice = std::slice::from_raw_parts(ptr, self.byte_size()).to_owned();
             OwnedPage::from_vec(slice)
@@ -352,14 +352,14 @@ impl OwnedPage {
 impl Borrow<Page> for OwnedPage {
     #[inline]
     fn borrow(&self) -> &Page {
-        unsafe { &*(self.page.as_ptr() as *const Page) }
+        unsafe { &*self.page.as_ptr().cast::<Page>() }
     }
 }
 
 impl BorrowMut<Page> for OwnedPage {
     #[inline]
     fn borrow_mut(&mut self) -> &mut Page {
-        unsafe { &mut *(self.page.as_mut_ptr() as *mut Page) }
+        unsafe { &mut *self.page.as_mut_ptr().cast::<Page>() }
     }
 }
 

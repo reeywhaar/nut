@@ -46,7 +46,7 @@ pub struct Bucket {
 
 impl fmt::Debug for Bucket {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let tx = self.tx().ok().map(|tx| &tx as *const Tx);
+        let tx = self.tx().ok().map(|tx| &raw const tx);
 
         f.debug_struct("Bucket")
             .field("bucket", &self.bucket)
@@ -175,7 +175,7 @@ impl Bucket {
         {
             // TODO:
             // if self.tx().unwrap().writable() {
-            let b = unsafe { (*(value.as_ptr() as *const IBucket)).clone() };
+            let b = unsafe { (*value.as_ptr().cast::<IBucket>()).clone() };
             child.bucket = b;
         }
 
@@ -234,7 +234,7 @@ impl Bucket {
             };
 
             let mut bucket = Bucket::new(tx_clone);
-            bucket.root_node = Some(NodeBuilder::new(&bucket).is_leaf(true).build());
+            bucket.root_node = Some(NodeBuilder::new(&raw const bucket).is_leaf(true).build());
             bucket.fill_percent = Self::DEFAULT_FILL_PERCENT;
 
             let value = bucket.write();
@@ -596,7 +596,7 @@ impl Bucket {
     {
         // If we have an inline page then just use that.
         if let Some(ref page) = self.page {
-            handler(PageNode::from(&**page as *const Page).upgrade(), 0);
+            handler(PageNode::from(&raw const **page).upgrade(), 0);
             return;
         }
         self.__for_each_page_node(self.bucket.root, 0, &mut handler)
@@ -649,8 +649,8 @@ impl Bucket {
 
                 // Update the child bucket header in this bucket.
                 let mut vec = vec![0u8; IBucket::SIZE];
-                let bucket_ptr = vec.as_mut_ptr() as *mut IBucket;
-                unsafe { std::ptr::copy_nonoverlapping(&child.bucket, bucket_ptr, 1) };
+                let bucket_ptr = vec.as_mut_ptr().cast::<IBucket>();
+                unsafe { std::ptr::copy_nonoverlapping(&raw const child.bucket, bucket_ptr, 1) };
                 vec
             };
 
@@ -739,8 +739,8 @@ impl Bucket {
         let mut value = vec![0u8; IBucket::SIZE + node_size];
 
         // Write a bucket header.
-        let bucket_ptr = value.as_mut_ptr() as *mut IBucket;
-        unsafe { std::ptr::copy_nonoverlapping(&self.bucket, bucket_ptr, 1) };
+        let bucket_ptr = value.as_mut_ptr().cast::<IBucket>();
+        unsafe { std::ptr::copy_nonoverlapping(&raw const self.bucket, bucket_ptr, 1) };
 
         // Convert byte slice to a fake page and write the root node.
         {
@@ -829,7 +829,7 @@ impl Bucket {
                 return Ok(PageNode::from(node.clone()));
             }
             return Ok(PageNode::from(
-                &**self.page.as_ref().ok_or("page empty")? as *const Page
+                &raw const **self.page.as_ref().ok_or("page empty")?,
             ));
         }
 

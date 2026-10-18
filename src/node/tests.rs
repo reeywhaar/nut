@@ -16,7 +16,7 @@ pub(crate) fn node_mock(bucket: *const Bucket) -> Node {
 fn create() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.put(b"baz", b"baz", [1, 22, 3].to_vec(), 0, 0);
     n.put(b"foo", b"foo", b"barack".to_vec(), 0, 0);
     n.put(b"bar", b"bar", b"bill".to_vec(), 0, 0);
@@ -47,7 +47,7 @@ fn read_page() {
     };
     {
         let nodes = unsafe {
-            std::slice::from_raw_parts_mut(page.get_data_mut_ptr() as *mut LeafPageElement, 3)
+            std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
         };
         nodes[0] = LeafPageElement {
             flags: 0,
@@ -62,9 +62,8 @@ fn read_page() {
             vsize: 3,
         };
 
-        let data = unsafe {
-            std::slice::from_raw_parts_mut(&mut nodes[2] as *mut LeafPageElement as *mut u8, 1024)
-        };
+        let data =
+            unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 1024) };
         data[..7].copy_from_slice(b"barfooz");
         data[7..7 + 13].copy_from_slice(b"helloworldbye");
     }
@@ -77,7 +76,7 @@ fn read_page() {
 
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.read(&page);
     let inodes = n.0.inodes.borrow();
 
@@ -93,7 +92,7 @@ fn read_page() {
 fn write_page() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(
         b"susy",
@@ -127,7 +126,7 @@ fn write_page() {
     n.write(&mut page);
 
     let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr() as *mut LeafPageElement, 3)
+        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
     };
     assert_eq!(nodes[0].ksize, 4);
     assert_eq!(nodes[0].vsize, 7);
@@ -139,7 +138,7 @@ fn write_page() {
     assert_eq!(nodes[2].vsize, 3);
     assert_eq!(nodes[2].pos, 36);
 
-    let mut n2 = node_mock(&bucket);
+    let mut n2 = node_mock(&raw const bucket);
     n2.read(&page);
     let inodes = n2.0.inodes.borrow();
     assert!(n2.is_leaf());
@@ -156,7 +155,7 @@ fn write_page() {
 fn split_two() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
@@ -174,7 +173,7 @@ fn split_two() {
 fn split_two_fail() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
@@ -192,7 +191,7 @@ fn split_two_fail() {
 fn split() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
@@ -215,7 +214,7 @@ fn split() {
 fn split_big() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     for i in 1..1000 {
         let key = format!("{i:08}");
@@ -237,7 +236,7 @@ fn split_big() {
 fn split_min_keys() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
@@ -250,7 +249,7 @@ fn split_min_keys() {
 fn split_single_page() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
-    let mut n = node_mock(&bucket);
+    let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
     n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
     n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);

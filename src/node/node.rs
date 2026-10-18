@@ -606,14 +606,14 @@ impl Node {
 
             if is_leaf {
                 let elem = p.leaf_page_element_mut(i);
-                let el_ptr = elem as *const LeafPageElement as *const u8;
+                let el_ptr = (elem as *const LeafPageElement).cast::<u8>();
                 elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
                 elem.flags = item.flags;
                 elem.ksize = item.key.len() as u32;
                 elem.vsize = item.value.len() as u32;
             } else {
                 let elem = p.branch_page_element_mut(i);
-                let el_ptr = elem as *const BranchPageElement as *const u8;
+                let el_ptr = (elem as *const BranchPageElement).cast::<u8>();
                 elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
                 elem.ksize = item.key.len() as u32;
                 elem.pgid = item.pgid;

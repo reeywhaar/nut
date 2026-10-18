@@ -65,7 +65,7 @@ impl fmt::Debug for TxInner {
             .try_read()
             .unwrap()
             .upgrade()
-            .map(|db| &db as *const DB);
+            .map(|db| &raw const db);
 
         f.debug_struct("TxInner")
             .field("writable", &self.writable)
@@ -623,7 +623,7 @@ impl Tx {
 
         let mut page = db.allocate(count, self)?;
         let page_id = page.id;
-        let page_ptr = &mut *page as *mut Page;
+        let page_ptr = &raw mut *page;
 
         self.0.pages.try_write().unwrap().insert(page_id, page);
 
@@ -711,12 +711,12 @@ impl Tx {
         {
             let pages = self.0.pages.try_read().unwrap();
             if let Some(p) = pages.get(&id) {
-                return Ok(&**p);
+                return Ok(&raw const **p);
             }
         }
 
         // Otherwise return directly from the mmap.
-        Ok(&*self.db()?.page(id))
+        Ok(&raw const *self.db()?.page(id))
     }
 
     /// Iterates over every page within a given page and executes a function.

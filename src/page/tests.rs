@@ -38,7 +38,7 @@ fn read_leaf_nodes() {
     page.flags = Flags::LEAVES;
     page.count = 2;
     let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr() as *mut LeafPageElement, 3)
+        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
     };
     nodes[0] = LeafPageElement {
         flags: 0,
@@ -53,9 +53,7 @@ fn read_leaf_nodes() {
         vsize: 3,
     };
 
-    let data = unsafe {
-        std::slice::from_raw_parts_mut(&mut nodes[2] as *mut LeafPageElement as *mut u8, 4096)
-    };
+    let data = unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 4096) };
     data[..7].copy_from_slice("barfooz".as_bytes());
     data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
 
@@ -77,7 +75,7 @@ fn to_owned() {
     page.flags = Flags::LEAVES;
     page.count = 2;
     let nodes = unsafe {
-        std::slice::from_raw_parts_mut(page.get_data_mut_ptr() as *mut LeafPageElement, 3)
+        std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
     };
     nodes[0] = LeafPageElement {
         flags: 0,
@@ -92,9 +90,7 @@ fn to_owned() {
         vsize: 3,
     };
 
-    let data = unsafe {
-        std::slice::from_raw_parts_mut(&mut nodes[2] as *mut LeafPageElement as *mut u8, 4096)
-    };
+    let data = unsafe { std::slice::from_raw_parts_mut((&raw mut nodes[2]).cast::<u8>(), 4096) };
     data[..7].copy_from_slice("barfooz".as_bytes());
     data[7..7 + 13].copy_from_slice("helloworldbye".as_bytes());
 
