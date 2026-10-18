@@ -588,19 +588,23 @@ impl<'a> DB {
         let handler = Arc::new(handler);
         let handler_clone = handler.clone();
 
+        let (max_batch_size, max_batch_delay) = (self.0.max_batch_size, self.0.max_batch_delay);
         let err_receiver = {
-            let mut batch = self.0.batch.lock();
-            if batch.as_ref().is_none_or(|b| b.closed()) {
-                *batch = Some(Batch::new(
-                    weak_db,
-                    self.0.max_batch_size,
-                    self.0.max_batch_delay,
-                ));
-            };
-            let batch = batch.as_mut().unwrap();
-
             let (err_sender, err_receiver) = mpsc::channel();
-            batch.push(Call::new(handler_clone, err_sender))?;
+            let mut call = Call::new(handler_clone, err_sender);
+            let mut slot = self.0.batch.lock();
+            loop {
+                let batch = slot.get_or_insert_with(|| {
+                    Batch::new(weak_db.clone(), max_batch_size, max_batch_delay)
+                });
+                match batch.push(call) {
+                    Ok(()) => break,
+                    Err(rejected) => {
+                        call = rejected;
+                        *slot = None;
+                    }
+                }
+            }
             err_receiver
         };
 

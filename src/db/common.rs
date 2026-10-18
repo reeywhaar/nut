@@ -60,20 +60,12 @@ impl Batch {
         batch
     }
 
-    pub(super) fn closed(&self) -> bool {
-        self.0.ran.load(Ordering::Acquire)
-    }
-
-    pub(super) fn push(&mut self, call: Call) -> Result<(), Error> {
-        if self.0.ran.load(Ordering::Acquire) {
-            return Err("Batch already run".into());
-        };
+    pub(super) fn push(&mut self, call: Call) -> Result<(), Call> {
         let calls_len = {
-            let mut calls = self
-                .0
-                .calls
-                .try_lock_for(Duration::from_secs(10))
-                .ok_or_else(|| Error::lock("batch calls"))?;
+            let mut calls = self.0.calls.lock();
+            if self.0.ran.load(Ordering::Acquire) {
+                return Err(call);
+            };
             calls.push(call);
             calls.len()
         };
@@ -88,8 +80,10 @@ impl Batch {
 
     /// trigger runs the batch if it hasn't already been run.
     pub(super) fn trigger(&mut self) {
-        use std::sync::atomic::Ordering::SeqCst;
-        if let Ok(false) = self.0.ran.compare_exchange(false, true, SeqCst, SeqCst) {
+        let calls = self.0.calls.lock();
+        let already_ran = self.0.ran.swap(true, Ordering::AcqRel);
+        drop(calls);
+        if !already_ran {
             self.run();
         }
     }
@@ -105,7 +99,12 @@ impl Batch {
             }
             return;
         };
-        db.0.batch.lock().take();
+        {
+            let mut slot = db.0.batch.lock();
+            if slot.as_ref().is_some_and(|b| Arc::ptr_eq(&b.0, &self.0)) {
+                *slot = None;
+            }
+        }
 
         let mut calls = self.0.calls.lock();
 

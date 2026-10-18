@@ -190,7 +190,7 @@ fn batch_run_retries_without_failed_call() {
             let _ = tx.create_bucket(name.as_bytes())?;
             Ok(())
         });
-        batch.push(call).unwrap();
+        assert!(batch.push(call).is_ok());
         receivers.push(receiver);
     }
     batch.trigger();
@@ -215,7 +215,7 @@ fn batch_run_retries_without_failed_call() {
 fn batch_run_without_database() {
     let mut batch = Batch::new(WeakDB::new(), 0, Duration::from_secs(60));
     let (call, receiver) = batch_call(|_| Ok(()));
-    batch.push(call).unwrap();
+    assert!(batch.push(call).is_ok());
     batch.trigger();
 
     assert_eq!(receiver.recv().unwrap(), Err("Database gone".to_string()));
@@ -227,8 +227,5 @@ fn batch_push_after_run() {
     batch.trigger();
 
     let (call, _receiver) = batch_call(|_| Ok(()));
-    assert_eq!(
-        batch.push(call),
-        Err(Error::Unexpected("Batch already run".to_string()))
-    );
+    assert!(batch.push(call).is_err());
 }
