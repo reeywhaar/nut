@@ -6,7 +6,7 @@
 
   _Since Nut supports same format as Bolt there are known issues:_
 
-  - Bolt uses Memmap to operate, there is no LRU or other cache, so if database doesn't fit in memory, then it's end of game, Nut will inevitably crash.
+  - Nut memory-maps the database file and lets the OS cache pages, like Bolt, so the database doesn't need to fit in RAM. The memory map has to fit in the process address space though, which limits databases to 2GB on 32-bit systems.
   - Data structures are written directly onto disk. No serialization takes place, so Nut doesn't understand db file from computer with different Endianness, for example.
 
 - **Transaction based**. In case of error transaction will be rolled back.
