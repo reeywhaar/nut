@@ -56,7 +56,7 @@ pub unsafe fn slice_to_u8_slice_mut<T: Sized>(p: &mut [T]) -> &mut [u8] {
 
 #[allow(dead_code)]
 pub fn is_aligned<T>(ptr: *const T) -> bool {
-    (ptr as usize) % align_of::<T>() == 0
+    (ptr as usize).is_multiple_of(align_of::<T>())
 }
 
 /// dump writes n bytes of the page to STDERR as hex output.
@@ -80,7 +80,7 @@ pub fn hexdump<T: Sized>(input: &T, max: usize) {
 #[allow(dead_code)]
 pub fn hexdump_slice<T: Sized>(input: &[T], max: usize) {
     let buf = unsafe { from_raw_parts(input.as_ptr() as *const u8, max) };
-    eprintln!("{:x?}", &buf);
+    eprintln!("{:x?}", buf);
 }
 
 pub fn clamp<T: PartialOrd>(n: T, min: T, max: T) -> T {

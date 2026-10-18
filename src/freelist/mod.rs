@@ -198,7 +198,7 @@ impl FreeList {
         self.read(p);
 
         let mut pcache = Vec::<PGID>::new();
-        for (_, pids) in self.pending.iter() {
+        for pids in self.pending.values() {
             for pid in pids.iter() {
                 pcache.push(*pid);
             }
@@ -222,7 +222,7 @@ impl FreeList {
         for id in self.ids.iter() {
             new_cache.insert(*id, true);
         }
-        for (_key, ids) in self.pending.iter() {
+        for ids in self.pending.values() {
             for id in ids.iter() {
                 new_cache.insert(*id, true);
             }

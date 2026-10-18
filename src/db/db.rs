@@ -654,8 +654,8 @@ impl<'a> DB {
         // Validate the meta pages. We only return an error if both meta pages fail
         // validation, since meta0 failing validation means that it wasn't saved
         // properly -- but we can recover using meta1. And vice-versa.
-        if check0.is_err() && check1.is_err() {
-            return Err(format!("mmap fail: {}", check0.unwrap_err()).into());
+        if let (Err(e), Err(_)) = (check0, check1) {
+            return Err(format!("mmap fail: {}", e).into());
         }
 
         Ok(())
@@ -683,7 +683,7 @@ impl<'a> DB {
         // Ensure that the mmap size is a multiple of the page size.
         // This should always be true since we're incrementing in MBs.
         let page_size = self.0.page_size as u64;
-        if (size % page_size) != 0 {
+        if !size.is_multiple_of(page_size) {
             size = ((size / page_size) + 1) * page_size;
         };
 
@@ -716,7 +716,7 @@ impl<'a> DB {
     }
 
     /// Retrieves page from mmap
-    pub(crate) fn page(&self, id: PGID) -> MappedRwLockReadGuard<Page> {
+    pub(crate) fn page(&self, id: PGID) -> MappedRwLockReadGuard<'_, Page> {
         let page_size = self.0.page_size;
         let pos = id as usize * page_size;
         let mmap = self.0.mmap.read_recursive();

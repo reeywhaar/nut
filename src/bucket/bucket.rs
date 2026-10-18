@@ -100,7 +100,7 @@ impl Bucket {
     }
 
     /// Creates a cursor associated with the bucket.
-    pub fn cursor(&self) -> Result<Cursor<&Bucket>, Error> {
+    pub fn cursor(&self) -> Result<Cursor<'_, &Bucket>, Error> {
         self.tx()?.0.stats.lock().cursor_count += 1;
 
         Ok(Cursor::new(self))

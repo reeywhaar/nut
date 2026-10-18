@@ -349,7 +349,7 @@ fn pages(o: PagesOptions) -> Result<(), String> {
                 &mut stdout,
                 "{:>width1$} {:<width2$} {:>width3$} {:>width4$}",
                 p.id,
-                &format!("{:?}", p.ptype),
+                format!("{:?}", p.ptype),
                 p.count,
                 p.overflow_count,
                 width1 = paddings.0,

@@ -150,7 +150,7 @@ impl Tx {
     /// All items in the cursor will return a nil value because all items in root bucket are also buckets.
     /// The cursor is only valid as long as the transaction is open.
     /// Do not use a cursor after the transaction is closed.
-    pub fn cursor(&self) -> Cursor<RwLockWriteGuard<Bucket>> {
+    pub fn cursor(&self) -> Cursor<'_, RwLockWriteGuard<'_, Bucket>> {
         self.0.stats.lock().cursor_count += 1;
 
         Cursor::new(self.0.root.write())
@@ -164,7 +164,7 @@ impl Tx {
     /// Bucket retrieves a bucket by name.
     /// Returns None if the bucket does not exist.
     /// The bucket instance is only valid for the lifetime of the transaction.
-    pub fn bucket(&self, key: &[u8]) -> Result<MappedRwLockReadGuard<Bucket>, Error> {
+    pub fn bucket(&self, key: &[u8]) -> Result<MappedRwLockReadGuard<'_, Bucket>, Error> {
         let bucket = self.0.root.try_read().ok_or("Can't acquire bucket")?;
 
         RwLockReadGuard::try_map(bucket, |b| b.bucket(key)).map_err(|_| "Can't get bucket".into())
@@ -173,7 +173,7 @@ impl Tx {
     /// Bucket retrieves a mutable bucket by name.
     /// Returns None if the bucket does not exist.
     /// The bucket instance is only valid for the lifetime of the transaction.
-    pub fn bucket_mut(&mut self, key: &[u8]) -> Result<MappedRwLockWriteGuard<Bucket>, Error> {
+    pub fn bucket_mut(&mut self, key: &[u8]) -> Result<MappedRwLockWriteGuard<'_, Bucket>, Error> {
         if !self.0.writable {
             return Err(Error::TxReadonly);
         };
@@ -192,7 +192,10 @@ impl Tx {
     /// Creates a new bucket.
     /// Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
     /// The bucket instance is only valid for the lifetime of the transaction.
-    pub fn create_bucket(&mut self, key: &[u8]) -> Result<MappedRwLockWriteGuard<Bucket>, Error> {
+    pub fn create_bucket(
+        &mut self,
+        key: &[u8],
+    ) -> Result<MappedRwLockWriteGuard<'_, Bucket>, Error> {
         if !self.0.writable {
             return Err(Error::TxReadonly);
         };
@@ -209,7 +212,7 @@ impl Tx {
     pub fn create_bucket_if_not_exists(
         &mut self,
         key: &[u8],
-    ) -> Result<MappedRwLockWriteGuard<Bucket>, Error> {
+    ) -> Result<MappedRwLockWriteGuard<'_, Bucket>, Error> {
         if !self.0.writable {
             return Err(Error::TxReadonly);
         };
@@ -648,7 +651,7 @@ impl Tx {
                 (pgid, x.1)
             })
             .collect();
-        pages.sort_by(|a, b| a.0.cmp(&b.0));
+        pages.sort_by_key(|a| a.0);
         let mut db = self.db()?;
 
         let page_size = db.page_size();

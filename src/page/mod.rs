@@ -77,7 +77,7 @@ impl Page {
         &mut self.ptr as *mut PhantomData<u8> as *mut u8
     }
 
-    pub(crate) fn data(&self) -> PageData {
+    pub(crate) fn data(&self) -> PageData<'_> {
         let count = self.count as usize;
         unsafe {
             match self.flags {
@@ -100,7 +100,7 @@ impl Page {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn data_mut(&mut self) -> PageData {
+    pub(crate) fn data_mut(&mut self) -> PageData<'_> {
         let count = self.count as usize;
         unsafe {
             match self.flags {
