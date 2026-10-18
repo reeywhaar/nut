@@ -560,7 +560,9 @@ impl Bucket {
             if depth + 1 > stats.depth {
                 stats.depth = depth + 1;
             }
-        }));
+            Ok(())
+        }))
+        .unwrap();
 
         // Alloc stats can be computed from page counts and pageSize.
         stats.branch_alloc = (stats.branch_page_n + stats.branch_overflow_n) * page_size;
@@ -575,17 +577,17 @@ impl Bucket {
     }
 
     /// Iterates over every page in a bucket, including inline pages.
-    fn for_each_page<'a>(&self, mut handler: Box<dyn FnMut(&Page, usize) + 'a>) {
+    fn for_each_page<'a>(
+        &self,
+        mut handler: Box<dyn FnMut(&Page, usize) -> Result<(), Error> + 'a>,
+    ) -> Result<(), Error> {
         // If we have an inline page then just use that.
         if let Some(ref page) = self.page {
-            handler(page, 0);
-            return;
+            return handler(page, 0);
         }
 
         // Otherwise traverse the page hierarchy.
-        self.tx()
-            .unwrap()
-            .for_each_page(self.bucket.root, 0, handler);
+        self.tx()?.for_each_page(self.bucket.root, 0, handler)
     }
 
     /// Iterates over every page (or node) in a bucket.

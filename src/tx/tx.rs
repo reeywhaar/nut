@@ -596,13 +596,13 @@ impl Tx {
     }
 
     pub(super) fn __check(&self, ch: mpsc::Sender<String>) {
-        let freed = self.freed();
-        if let Err(e) = freed {
-            ch.send(e.to_string()).unwrap();
-            return;
+        if let Err(e) = self.check_pages(&ch) {
+            ch.send(e.to_string()).expect("Check receiver dropped");
         }
+    }
 
-        let freed = freed.unwrap();
+    fn check_pages(&self, ch: &mpsc::Sender<String>) -> Result<(), Error> {
+        let freed = self.freed()?;
 
         let mut reachable = HashMap::new();
         reachable.insert(0, true);
@@ -611,27 +611,34 @@ impl Tx {
             .0
             .meta
             .try_read_for(Duration::from_secs(10))
-            .unwrap()
+            .ok_or_else(|| Error::lock("meta"))?
             .freelist;
-        let freelist_overflow = unsafe { &*self.page(freelist_pgid).unwrap() }.overflow;
+        let freelist_overflow = unsafe { &*self.page(freelist_pgid)? }.overflow;
         for i in 0..=freelist_overflow {
             reachable.insert(freelist_pgid + u64::from(i), true);
         }
 
-        self.check_bucket(
-            &self.0.root.try_read().unwrap(),
-            &mut reachable,
-            &freed,
-            &ch,
-        );
+        let root = self
+            .0
+            .root
+            .try_read()
+            .ok_or_else(|| Error::lock("bucket"))?;
+        self.check_bucket(&root, &mut reachable, &freed, ch)?;
 
-        for i in 0..self.0.meta.try_read().unwrap().pgid {
+        let pgid = self
+            .0
+            .meta
+            .try_read()
+            .ok_or_else(|| Error::lock("meta"))?
+            .pgid;
+        for i in 0..pgid {
             let is_reachable = reachable.contains_key(&i);
             let is_freed = freed.contains_key(&i);
             if !is_reachable && !is_freed {
-                ch.send(format!("Page {i}: unreachable unfreed")).unwrap();
+                report(ch, format!("Page {i}: unreachable unfreed"))?;
             };
         }
+        Ok(())
     }
 
     fn check_bucket(
@@ -640,23 +647,22 @@ impl Tx {
         reachable: &mut HashMap<PGID, bool>,
         freed: &HashMap<PGID, bool>,
         ch: &mpsc::Sender<String>,
-    ) {
+    ) -> Result<(), Error> {
         if b.bucket.root == 0 {
-            return;
+            return Ok(());
         }
 
         let meta_pgid = self.pgid();
 
         let handler = Box::new(|p: &Page, _pgid: usize| {
             if p.id > meta_pgid {
-                ch.send(format!("Page {}: out of bounds: {}", p.id, meta_pgid))
-                    .unwrap();
+                report(ch, format!("Page {}: out of bounds: {}", p.id, meta_pgid))?;
             }
 
             for i in 0..=p.overflow {
                 let id = p.id + u64::from(i);
                 if reachable.contains_key(&id) {
-                    ch.send(format!("Page {id}: multiple references")).unwrap();
+                    report(ch, format!("Page {id}: multiple references"))?;
                 }
                 reachable.insert(id, true);
             }
@@ -664,23 +670,21 @@ impl Tx {
             let page_type_is_valid = matches!(p.flags, Flags::BRANCHES | Flags::LEAVES);
 
             if freed.contains_key(&p.id) {
-                ch.send(format!("Page {}: reachable freed", p.id)).unwrap();
+                report(ch, format!("Page {}: reachable freed", p.id))?;
             } else if !page_type_is_valid {
-                ch.send(format!("Page {}: invalid type: {}", p.id, p.flags))
-                    .unwrap();
+                report(ch, format!("Page {}: invalid type: {}", p.id, p.flags))?;
             }
+            Ok(())
         });
 
-        b.tx().unwrap().for_each_page(b.bucket.root, 0, handler);
+        b.tx()?.for_each_page(b.bucket.root, 0, handler)?;
 
-        b.for_each(Box::new(|k, _v| -> Result<(), String> {
-            let child = b.bucket(k);
-            if let Some(child) = child {
-                self.check_bucket(child, reachable, freed, ch);
+        b.for_each(Box::new(|k, _v| -> Result<(), Error> {
+            if let Some(child) = b.bucket(k) {
+                self.check_bucket(child, reachable, freed, ch)?;
             };
             Ok(())
         }))
-        .unwrap();
     }
 
     /// Returns a contiguous block of memory starting at a given page.
@@ -804,23 +808,24 @@ impl Tx {
         &self,
         pgid: PGID,
         depth: usize,
-        mut func: Box<dyn FnMut(&Page, usize) + 'a>,
-    ) {
-        let p = unsafe { &*self.page(pgid).unwrap() };
+        mut func: Box<dyn FnMut(&Page, usize) -> Result<(), Error> + 'a>,
+    ) -> Result<(), Error> {
+        let p = unsafe { &*self.page(pgid)? };
 
         // Execute function.
-        func(p, depth);
+        func(p, depth)?;
 
         // Recursively loop over children.
         let flags = p.flags;
         if flags != Flags::BRANCHES {
-            return;
+            return Ok(());
         }
         let count = p.count as usize;
         for i in 0..count {
             let el = p.branch_page_element(i);
-            self.for_each_page(el.pgid, depth + 1, Box::new(|p, d| func(p, d)));
+            self.for_each_page(el.pgid, depth + 1, Box::new(|p, d| func(p, d)))?;
         }
+        Ok(())
     }
 
     /// Returns page information for a given page number.
@@ -891,4 +896,8 @@ impl WeakTx {
     pub(crate) fn from(tx: &Tx) -> Self {
         Self(Arc::downgrade(&tx.0))
     }
+}
+
+fn report(ch: &mpsc::Sender<String>, msg: String) -> Result<(), Error> {
+    ch.send(msg).map_err(|_| "Check receiver dropped".into())
 }
