@@ -246,7 +246,7 @@ impl Node {
                     let id = page.id;
                     let txpgid = tx.pgid();
                     if id >= txpgid {
-                        panic!("pgid ({}) above high water mark ({})", id, txid)
+                        return Err(format!("Pgid ({id}) above high water mark ({txpgid})").into());
                     }
                     *node.0.pgid.borrow_mut() = id;
                     node.write(page);
@@ -262,11 +262,10 @@ impl Node {
                     }
                     let pgid = *node.0.pgid.borrow();
                     p.put(okey.unwrap().as_slice(), &nkey, vec![], pgid, 0);
+                    if nkey.is_empty() {
+                        return Err("Spill: zero-length node key".into());
+                    }
                     *node.0.key.borrow_mut() = Some(nkey);
-                    assert!(
-                        !node.0.key.borrow().as_ref().unwrap().is_empty(),
-                        "spill: zero-length node key"
-                    )
                 }
 
                 tx.0.stats.lock().spill += 1;

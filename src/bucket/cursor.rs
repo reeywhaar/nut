@@ -56,7 +56,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
                 Flags::BRANCHES => (),
                 Flags::LEAVES => (),
                 _ => {
-                    panic!("invalid page type: {}: {}", p.id, p.flags);
+                    return Err(format!("Invalid page type: {}: {}", p.id, p.flags).into());
                 }
             };
         }
@@ -213,11 +213,15 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         };
         let stacklen = self.stack.borrow().len();
         for refi in &self.stack.borrow()[..stacklen - 1] {
-            assert!(!n.is_leaf(), "expected branch");
+            if n.is_leaf() {
+                return Err(Error::ExpectedBranch);
+            }
             let child = n.child_at(refi.index).map_err(|_| Error::TraverseFailed)?;
             n = child;
         }
-        assert!(n.is_leaf(), "expected leaf");
+        if !n.is_leaf() {
+            return Err(Error::ExpectedLeaf);
+        }
         Ok(n)
     }
 

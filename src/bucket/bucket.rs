@@ -692,7 +692,7 @@ impl Bucket {
 
             // Update the root node for this bucket.
             if pgid >= txpgid {
-                panic!("pgid ({}) above high water mark ({})", pgid, txpgid);
+                return Err(format!("Pgid ({pgid}) above high water mark ({txpgid})").into());
             }
 
             self.bucket.root = pgid;
