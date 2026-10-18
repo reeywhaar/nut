@@ -222,7 +222,7 @@ impl Node {
             let bucket = self.bucket_mut().ok_or("Bucket empty")?;
             let mut tx = bucket.tx()?;
             let db = tx.db()?;
-            let txid = tx.id();
+            let txid = tx.id()?;
 
             for node in &mut nodes {
                 {
@@ -243,7 +243,7 @@ impl Node {
                 {
                     // Write the node.
                     let id = page.id;
-                    let txpgid = tx.pgid();
+                    let txpgid = tx.pgid()?;
                     if id >= txpgid {
                         return Err(format!("Pgid ({id}) above high water mark ({txpgid})").into());
                     }
@@ -474,7 +474,7 @@ impl Node {
         {
             let bucketmut = self.bucket_mut().ok_or("Bucket empty")?;
             let tx = bucketmut.tx()?;
-            let txid = tx.id();
+            let txid = tx.id()?;
             let page = unsafe { &*tx.page(*self.0.pgid.borrow())? };
             let db = tx.db()?;
             db.0.freelist.write().free(txid, page)?;
@@ -543,7 +543,7 @@ impl Node {
         pgid: PGID,
         flags: u32,
     ) -> Result<(), Error> {
-        let meta_pgid = self.bucket().ok_or("Bucket empty")?.tx()?.pgid();
+        let meta_pgid = self.bucket().ok_or("Bucket empty")?.tx()?.pgid()?;
 
         if pgid >= meta_pgid {
             return Err(format!("Pgid ({pgid}) above high water mark ({meta_pgid})").into());

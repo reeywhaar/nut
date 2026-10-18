@@ -400,11 +400,18 @@ impl<'a> DB {
             self.0.mmap.raw().lock_shared();
         }
 
-        let tx = TxBuilder::new()
+        let tx = match TxBuilder::new()
             .db(WeakDB::from(self))
             .writable(false)
             .check(self.0.check_mode.contains(CheckMode::READ))
-            .build();
+            .build()
+        {
+            Ok(tx) => tx,
+            Err(e) => {
+                unsafe { self.0.mmap.raw().unlock_shared() };
+                return Err(e);
+            }
+        };
 
         let mut txs = self.0.txs.write();
         txs.push(tx.clone());
@@ -443,33 +450,44 @@ impl<'a> DB {
         unsafe {
             self.0.rw_lock.raw().lock();
         };
-        let mut rw_tx = self.0.rw_tx.write();
-
-        let txs = self.0.txs.read();
-        let minid = txs
-            .iter()
-            .map(|tx| tx.id())
-            .min()
-            .unwrap_or(0xFFFF_FFFF_FFFF_FFFF);
-        drop(txs);
-
-        let tx = TxBuilder::new()
-            .db(WeakDB::from(self))
-            .writable(true)
-            .check(self.0.check_mode.contains(CheckMode::WRITE))
-            .build();
-        *rw_tx = Some(tx.clone());
-        drop(rw_tx);
-
-        // Free any pages associated with closed read-only transactions.
-        if minid > 0 {
-            self.0.freelist.try_write().unwrap().release(minid - 1);
-        }
+        let tx = match self.begin_rw_tx_inner() {
+            Ok(tx) => tx,
+            Err(e) => {
+                unsafe { self.0.rw_lock.raw().unlock() };
+                return Err(e);
+            }
+        };
 
         Ok(RWTxGuard {
             tx,
             db: std::marker::PhantomData,
         })
+    }
+
+    fn begin_rw_tx_inner(&mut self) -> Result<Tx, Error> {
+        let mut rw_tx = self.0.rw_tx.write();
+
+        let mut minid = 0xFFFF_FFFF_FFFF_FFFF;
+        for tx in self.0.txs.read().iter() {
+            minid = minid.min(tx.id()?);
+        }
+
+        // Free any pages associated with closed read-only transactions.
+        if minid > 0 {
+            self.0
+                .freelist
+                .try_write()
+                .ok_or_else(|| Error::lock("freelist"))?
+                .release(minid - 1);
+        }
+
+        let tx = TxBuilder::new()
+            .db(WeakDB::from(self))
+            .writable(true)
+            .check(self.0.check_mode.contains(CheckMode::WRITE))
+            .build()?;
+        *rw_tx = Some(tx.clone());
+        Ok(tx)
     }
 
     /// shorthand for db.begin_rw_tx with additional guarantee for panic safery
@@ -776,7 +794,7 @@ impl<'a> DB {
             };
         }
 
-        p.id = tx.pgid();
+        p.id = tx.pgid()?;
 
         // Resize mmap() if we're at the end.
         let minsz = (p.id + 1 + count) * self.0.page_size as u64;
@@ -786,7 +804,7 @@ impl<'a> DB {
         };
 
         // Move the page id high water mark.
-        tx.set_pgid(tx.pgid() + count)?;
+        tx.set_pgid(tx.pgid()? + count)?;
 
         Ok(p)
     }

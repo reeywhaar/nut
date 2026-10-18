@@ -8,7 +8,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 pub(crate) fn tx_mock() -> Tx {
-    let tx = TxBuilder::new().writable(true).build();
+    let tx = TxBuilder::new().writable(true).build().unwrap();
     tx.0.meta.write().pgid = 1;
     tx
 }

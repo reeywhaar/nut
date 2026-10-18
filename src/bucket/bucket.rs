@@ -206,7 +206,7 @@ impl Bucket {
     pub fn create_bucket(&mut self, key: &[u8]) -> Result<&mut Bucket, Error> {
         {
             let tx = self.tx()?;
-            if !tx.opened() {
+            if !tx.opened()? {
                 return Err(Error::TxClosed);
             }
             if !tx.writable() {
@@ -263,7 +263,7 @@ impl Bucket {
     pub fn delete_bucket(&mut self, key: &[u8]) -> Result<(), Error> {
         {
             let tx = self.tx()?;
-            if !tx.opened() {
+            if !tx.opened()? {
                 return Err(Error::DatabaseClosed);
             }
             if !tx.writable() {
@@ -365,7 +365,7 @@ impl Bucket {
     /// flowers.put(b"irises", b"Iris is a genus of species of flowering plants".to_vec()).unwrap()
     /// ```
     pub fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
-        if !self.tx()?.opened() {
+        if !self.tx()?.opened()? {
             return Err(Error::TxClosed);
         }
         if !self.tx()?.writable() {
@@ -477,7 +477,7 @@ impl Bucket {
         &self,
         mut handler: Box<dyn FnMut(&[u8], Option<&[u8]>) -> Result<(), E> + 'a>,
     ) -> Result<(), Error> {
-        if !self.tx()?.opened() {
+        if !self.tx()?.opened()? {
             return Err(Error::TxClosed);
         }
         let c = self.cursor()?;
@@ -695,7 +695,7 @@ impl Bucket {
             self.root_node = Some(root_node);
 
             let pgid = self.root_node.as_ref().unwrap().pgid();
-            let txpgid = self.tx()?.pgid();
+            let txpgid = self.tx()?.pgid()?;
 
             // Update the root node for this bucket.
             if pgid >= txpgid {
@@ -817,7 +817,7 @@ impl Bucket {
         let tx = self.tx()?;
         let db = tx.db()?;
         self.for_each_page_node(|p, _| match p {
-            Either::Left(p) => db.0.freelist.write().free(tx.id(), p),
+            Either::Left(p) => db.0.freelist.write().free(tx.id()?, p),
             Either::Right(n) => n.clone().free(),
         })?;
         self.bucket.root = 0;

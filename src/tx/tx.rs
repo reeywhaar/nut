@@ -103,10 +103,16 @@ impl Tx {
 
     /// Defines whether transaction is fresh and not been used before
     /// commiting transaction twice must resolve in error
-    pub(crate) fn opened(&self) -> bool {
-        match self.0.db.try_read().unwrap().upgrade() {
-            None => false,
-            Some(db) => db.opened(),
+    pub(crate) fn opened(&self) -> Result<bool, Error> {
+        match self
+            .0
+            .db
+            .try_read()
+            .ok_or_else(|| Error::lock("db"))?
+            .upgrade()
+        {
+            None => Ok(false),
+            Some(db) => Ok(db.opened()),
         }
     }
 
@@ -121,13 +127,23 @@ impl Tx {
     }
 
     /// Returns the transaction id.
-    pub(crate) fn id(&self) -> TXID {
-        self.0.meta.try_read().unwrap().txid
+    pub(crate) fn id(&self) -> Result<TXID, Error> {
+        Ok(self
+            .0
+            .meta
+            .try_read()
+            .ok_or_else(|| Error::lock("meta"))?
+            .txid)
     }
 
     /// Returns the transaction page id.
-    pub(crate) fn pgid(&self) -> PGID {
-        self.0.meta.try_read().unwrap().pgid
+    pub(crate) fn pgid(&self) -> Result<PGID, Error> {
+        Ok(self
+            .0
+            .meta
+            .try_read()
+            .ok_or_else(|| Error::lock("meta"))?
+            .pgid)
     }
 
     /// Returns the transaction page id.
@@ -146,8 +162,8 @@ impl Tx {
     }
 
     /// Returns current database size in bytes as seen by this transaction.
-    pub(super) fn size(&self) -> i64 {
-        self.pgid() as i64 * self.db().unwrap().page_size() as i64
+    pub(super) fn size(&self) -> Result<i64, Error> {
+        Ok(self.pgid()? as i64 * self.db()?.page_size() as i64)
     }
 
     /// Creates a cursor associated with the root bucket.
@@ -314,7 +330,7 @@ impl Tx {
         file.seek(SeekFrom::Start(page_size as u64 * 2))
             .map_err(|e| format!("{e}"))?;
 
-        let size = self.size() as u64 - (page_size as u64 * 2);
+        let size = self.size()? as u64 - (page_size as u64 * 2);
         written += copy(&mut Read::by_ref(&mut file.get_mut()).take(size), &mut w)
             .map_err(|e| format!("{e}"))? as usize;
 
@@ -446,7 +462,7 @@ impl Tx {
                 .freelist = page.id;
 
             // If the high water mark has moved up then attempt to grow the database.
-            if self.pgid() > tx_pgid {
+            if self.pgid()? > tx_pgid {
                 db.grow((tx_pgid + 1) * page_size as u64)?;
             }
 
@@ -520,7 +536,7 @@ impl Tx {
             }
         };
         if self.writable() {
-            let txid = self.id();
+            let txid = self.id()?;
             let mut freelist = db.0.freelist.write();
             freelist.rollback(txid);
             let freelist_id = db.meta()?.freelist;
@@ -652,7 +668,7 @@ impl Tx {
             return Ok(());
         }
 
-        let meta_pgid = self.pgid();
+        let meta_pgid = self.pgid()?;
 
         let handler = Box::new(|p: &Page, _pgid: usize| {
             if p.id > meta_pgid {
@@ -831,10 +847,10 @@ impl Tx {
     /// Returns page information for a given page number.
     /// This is only safe for concurrent use when used by a writable transaction.
     pub fn page_info(&self, id: usize) -> Result<Option<PageInfo>, Error> {
-        if !self.opened() {
+        if !self.opened()? {
             return Err(Error::TxClosed);
         };
-        if id >= self.pgid() as usize {
+        if id >= self.pgid()? as usize {
             return Ok(None);
         };
 

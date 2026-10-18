@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 use crate::bucket::Bucket;
 use crate::db::WeakDB;
+use crate::errors::Error;
 use crate::meta::Meta;
 
 use super::{Tx, TxInner, WeakTx};
@@ -39,10 +40,10 @@ impl TxBuilder {
         self
     }
 
-    pub fn build(self) -> Tx {
+    pub fn build(self) -> Result<Tx, Error> {
         let mut meta = match self.db.upgrade() {
             None => Meta::default(),
-            Some(db) => db.meta().unwrap(),
+            Some(db) => db.meta()?,
         };
         if self.writable {
             meta.txid += 1;
@@ -65,9 +66,14 @@ impl TxBuilder {
         {
             let mut bucket = tx.0.root.write();
             bucket.tx = WeakTx::from(&tx);
-            bucket.bucket = tx.0.meta.try_read().unwrap().root.clone();
+            bucket.bucket =
+                tx.0.meta
+                    .try_read()
+                    .ok_or_else(|| Error::lock("meta"))?
+                    .root
+                    .clone();
         }
 
-        tx
+        Ok(tx)
     }
 }
