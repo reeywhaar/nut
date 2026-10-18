@@ -200,3 +200,19 @@ impl From<Error> for String {
 }
 
 impl RError for Error {}
+
+impl Error {
+    pub(crate) fn lock(name: &str) -> Self {
+        Error::LockError(name.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn lock() {
+        assert_eq!(Error::lock("meta"), Error::LockError("meta".to_string()));
+    }
+}

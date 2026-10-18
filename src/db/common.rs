@@ -73,7 +73,7 @@ impl Batch {
                 .0
                 .calls
                 .try_lock_for(Duration::from_secs(10))
-                .ok_or("Can't acquire batch calls")?;
+                .ok_or_else(|| Error::lock("batch calls"))?;
             calls.push(call);
             calls.len()
         };

@@ -132,7 +132,11 @@ impl Tx {
 
     /// Returns the transaction page id.
     pub(crate) fn set_pgid(&mut self, id: PGID) -> Result<(), Error> {
-        self.0.meta.try_write().ok_or("Pgid locked")?.pgid = id;
+        self.0
+            .meta
+            .try_write()
+            .ok_or_else(|| Error::lock("meta"))?
+            .pgid = id;
         Ok(())
     }
 
@@ -165,7 +169,11 @@ impl Tx {
     /// Returns None if the bucket does not exist.
     /// The bucket instance is only valid for the lifetime of the transaction.
     pub fn bucket(&self, key: &[u8]) -> Result<MappedRwLockReadGuard<'_, Bucket>, Error> {
-        let bucket = self.0.root.try_read().ok_or("Can't acquire bucket")?;
+        let bucket = self
+            .0
+            .root
+            .try_read()
+            .ok_or_else(|| Error::lock("bucket"))?;
 
         RwLockReadGuard::try_map(bucket, |b| b.bucket(key)).map_err(|_| "Can't get bucket".into())
     }
@@ -178,7 +186,11 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
-        let bucket = self.0.root.try_write().ok_or("Can't acquire bucket")?;
+        let bucket = self
+            .0
+            .root
+            .try_write()
+            .ok_or_else(|| Error::lock("bucket"))?;
 
         RwLockWriteGuard::try_map(bucket, |b| b.bucket_mut(key))
             .map_err(|_| "Can't get bucket".into())
@@ -200,7 +212,11 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
-        let bucket = self.0.root.try_write().ok_or("Can't acquire bucket")?;
+        let bucket = self
+            .0
+            .root
+            .try_write()
+            .ok_or_else(|| Error::lock("bucket"))?;
 
         RwLockWriteGuard::try_map(bucket, |b| b.create_bucket(key).ok())
             .map_err(|_| "Can't get bucket".into())
@@ -217,7 +233,11 @@ impl Tx {
             return Err(Error::TxReadonly);
         };
 
-        let bucket = self.0.root.try_write().ok_or("Can't acquire bucket")?;
+        let bucket = self
+            .0
+            .root
+            .try_write()
+            .ok_or_else(|| Error::lock("bucket"))?;
 
         RwLockWriteGuard::try_map(bucket, |b| b.create_bucket_if_not_exists(key).ok())
             .map_err(|_| "Can't get bucket".into())
@@ -233,7 +253,7 @@ impl Tx {
         self.0
             .root
             .try_write()
-            .ok_or("Can't acquire bucket")?
+            .ok_or_else(|| Error::lock("bucket"))?
             .delete_bucket(key)
     }
 
@@ -247,7 +267,11 @@ impl Tx {
         &self,
         mut handler: Box<dyn FnMut(&[u8], Option<&Bucket>) -> Result<(), E> + 'a>,
     ) -> Result<(), Error> {
-        let root = self.0.root.try_write().ok_or("Can't acquire bucket")?;
+        let root = self
+            .0
+            .root
+            .try_write()
+            .ok_or_else(|| Error::lock("bucket"))?;
         root.for_each(Box::new(|k: &[u8], _v: Option<&[u8]>| -> Result<(), E> {
             handler(k, root.bucket(k))
         }))
@@ -258,10 +282,7 @@ impl Tx {
     pub fn write_to<W: Write>(&self, mut w: W) -> Result<i64, Error> {
         let db = self.db()?;
         let page_size = db.page_size();
-        let mut file =
-            db.0.file
-                .try_write()
-                .ok_or("Can't obtain file write access")?;
+        let mut file = db.0.file.try_write().ok_or_else(|| Error::lock("file"))?;
 
         let mut written = 0;
 
@@ -270,7 +291,12 @@ impl Tx {
 
         // first page
         {
-            *page.meta_mut() = self.0.meta.try_read().ok_or("Can't acquire meta")?.clone();
+            *page.meta_mut() = self
+                .0
+                .meta
+                .try_read()
+                .ok_or_else(|| Error::lock("meta"))?
+                .clone();
             page.meta_mut().checksum = page.meta().sum64();
             w.write_all(page.buf()).map_err(|e| format!("{e}"))?;
             written += page.size();
@@ -523,7 +549,7 @@ impl Tx {
             .0
             .freelist
             .try_read()
-            .ok_or("Can't acquire freelist")?
+            .ok_or_else(|| Error::lock("freelist"))?
             .get_pgids();
 
         for id in &all_pgids {
@@ -637,7 +663,7 @@ impl Tx {
         self.0
             .pages
             .try_write()
-            .ok_or("Can't acquire pages")?
+            .ok_or_else(|| Error::lock("pages"))?
             .insert(page_id, page);
 
         // Update statistics.
@@ -708,7 +734,7 @@ impl Tx {
         self.0
             .meta
             .try_write()
-            .ok_or("Can't acquire meta")?
+            .ok_or_else(|| Error::lock("meta"))?
             .write(page)?;
 
         db.write_at(0, IOCursor::new(buf))?;
@@ -726,7 +752,11 @@ impl Tx {
     pub(crate) fn page(&self, id: PGID) -> Result<*const Page, Error> {
         // Check the dirty pages first.
         {
-            let pages = self.0.pages.try_read().ok_or("Can't acquire pages")?;
+            let pages = self
+                .0
+                .pages
+                .try_read()
+                .ok_or_else(|| Error::lock("pages"))?;
             if let Some(p) = pages.get(&id) {
                 return Ok(&raw const **p);
             }
@@ -786,7 +816,7 @@ impl Tx {
             .0
             .freelist
             .try_read()
-            .ok_or("Can't acquire freelist")?
+            .ok_or_else(|| Error::lock("freelist"))?
             .freed(id as u64)
         {
             info.ptype = p.flags

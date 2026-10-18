@@ -232,7 +232,7 @@ impl Node {
                     if node_pgid > 0 {
                         db.0.freelist
                             .try_write()
-                            .ok_or("Can't acquire freelist")?
+                            .ok_or_else(|| Error::lock("freelist"))?
                             .free(txid, unsafe { &*tx.page(node_pgid)? })?;
                         *node.0.pgid.borrow_mut() = 0;
                     }

@@ -168,7 +168,7 @@ impl<'a> DB {
             let freelist_page = db.page(freelist_id);
             db.0.freelist
                 .try_write()
-                .ok_or("Can't acquire freelist")?
+                .ok_or_else(|| Error::lock("freelist"))?
                 .read(&freelist_page);
         }
 
@@ -269,7 +269,7 @@ impl<'a> DB {
                 .0
                 .txs
                 .try_write_for(Duration::from_secs(10))
-                .ok_or("Can't acquire txs")?;
+                .ok_or_else(|| Error::lock("txs"))?;
 
             let index = txs.iter().position(|dbtx| Arc::ptr_eq(&tx.0, &dbtx.0));
             debug_assert!(index.is_some(), "trying to remove nonexistent tx");
@@ -355,7 +355,7 @@ impl<'a> DB {
         // self.munmap()?;
         self.0.opened.store(false, Ordering::Release);
 
-        let file = self.0.file.try_read().ok_or("Can't acquire file lock")?;
+        let file = self.0.file.try_read().ok_or_else(|| Error::lock("file"))?;
 
         let file = file.get_ref();
 
@@ -606,12 +606,12 @@ impl<'a> DB {
             .0
             .file
             .try_read_for(Duration::from_secs(60))
-            .ok_or("Can't acquire file lock")?;
+            .ok_or_else(|| Error::lock("file"))?;
         let mut mmap = self
             .0
             .mmap
             .try_write_for(Duration::from_secs(600))
-            .ok_or("Can't acquire mmap lock")?;
+            .ok_or_else(|| Error::lock("mmap"))?;
 
         let init_min_size = self.0.page_size as u64 * 4;
 
@@ -800,7 +800,7 @@ impl<'a> DB {
             return Err(Error::DatabaseReadonly);
         };
 
-        let file = self.0.file.try_write().ok_or("Can't acquire file lock")?;
+        let file = self.0.file.try_write().ok_or_else(|| Error::lock("file"))?;
 
         if file.get_ref().metadata()?.len() >= size {
             return Ok(());
@@ -813,7 +813,7 @@ impl<'a> DB {
                 .0
                 .mmap
                 .try_read()
-                .ok_or("Can't acquire mmap lock")?
+                .ok_or_else(|| Error::lock("mmap"))?
                 .as_ref()
                 .len() as u64;
             if mmapsize < self.0.alloc_size {
