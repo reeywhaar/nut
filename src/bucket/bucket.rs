@@ -168,7 +168,10 @@ impl Bucket {
     /// value is bytes serialized bucket
     pub(crate) fn open_bucket(&self, value: Vec<u8>) -> Result<Bucket, Error> {
         if value.len() < IBucket::SIZE {
-            return Err(format!("Bucket value too short: {}", value.len()).into());
+            return Err(Error::corrupted(format!(
+                "Bucket value too short: {}",
+                value.len()
+            )));
         }
         let mut child = Bucket::new(self.tx.clone());
         // let value = unsafe { value.as_ref().unwrap() };
@@ -301,7 +304,7 @@ impl Bucket {
         }
         let mut node = c.node()?;
         {
-            let child = self.try_bucket_mut(key)?.ok_or("Can't get bucket")?;
+            let child = self.try_bucket_mut(key)?.ok_or(Error::BucketNotFound)?;
             let child_buckets = child.try_buckets()?;
 
             for bucket in &child_buckets {
@@ -698,15 +701,16 @@ impl Bucket {
             let mut c = mutself.cursor()?;
             let item = c.seek(name)?;
             if item.key != Some(name.as_slice()) {
-                return Err(format!(
+                return Err(Error::corrupted(format!(
                     "Misplaced bucket header: {:?} -> {:?}",
-                    name,
-                    item.key.as_ref().unwrap()
-                )
-                .into());
+                    name, item.key
+                )));
             }
             if !item.is_bucket() {
-                return Err(format!("Unexpected bucket header flag: {}", item.flags).into());
+                return Err(Error::corrupted(format!(
+                    "Unexpected bucket header flag: {}",
+                    item.flags
+                )));
             }
             c.node()?.put(name, name, value, 0, Self::FLAG)?;
         }
@@ -727,7 +731,9 @@ impl Bucket {
 
             // Update the root node for this bucket.
             if pgid >= txpgid {
-                return Err(format!("Pgid ({pgid}) above high water mark ({txpgid})").into());
+                return Err(Error::corrupted(format!(
+                    "Pgid ({pgid}) above high water mark ({txpgid})"
+                )));
             }
 
             self.bucket.root = pgid;
@@ -859,7 +865,9 @@ impl Bucket {
         // differently. We'll return the rootNode (if available) or the fake page.
         if self.bucket.root == 0 {
             if id != 0 {
-                return Err(format!("Inline bucket non-zero page access: {id} != 0").into());
+                return Err(Error::corrupted(format!(
+                    "Inline bucket non-zero page access: {id} != 0"
+                )));
             }
             if let Some(ref node) = self.root_node {
                 return Ok(PageNode::from(node.clone()));

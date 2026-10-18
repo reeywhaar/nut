@@ -60,7 +60,7 @@ impl Page {
     }
 
     pub(crate) fn check_bounds(&self, len: usize) -> Result<(), Error> {
-        let out_of_bounds = || Error::from(format!("Page {}: data out of bounds", self.id));
+        let out_of_bounds = || Error::corrupted(format!("Page {}: data out of bounds", self.id));
         let header = Self::header_size() as u64;
         let len = len as u64;
         let count = u64::from(self.count);
@@ -163,7 +163,12 @@ impl Page {
                     };
                     PageData::Freelist(std::slice::from_raw_parts(ptr, len))
                 }
-                _ => return Err(format!("Unknown page type: {}", self.flags).into()),
+                _ => {
+                    return Err(Error::corrupted(format!(
+                        "Unknown page type: {}",
+                        self.flags
+                    )));
+                }
             })
         }
     }
@@ -191,7 +196,12 @@ impl Page {
                     };
                     PageData::Freelist(std::slice::from_raw_parts_mut(ptr, len))
                 }
-                _ => return Err(format!("Unknown page type: {}", self.flags).into()),
+                _ => {
+                    return Err(Error::corrupted(format!(
+                        "Unknown page type: {}",
+                        self.flags
+                    )));
+                }
             })
         }
     }
@@ -251,7 +261,7 @@ impl Page {
     pub(crate) fn branch_page_elements(&self) -> Result<&[BranchPageElement], Error> {
         match self.data()? {
             PageData::Branches(l) => Ok(l),
-            _ => Err("Flags are not branches".into()),
+            _ => Err(Error::corrupted("Flags are not branches")),
         }
     }
 
@@ -268,9 +278,9 @@ impl Page {
 
     /// Retrieves the branch node by index
     pub(crate) fn branch_page_element(&self, index: usize) -> Result<&BranchPageElement, Error> {
-        self.branch_page_elements()?
-            .get(index)
-            .ok_or_else(|| format!("Page {}: element {index} out of range", self.id).into())
+        self.branch_page_elements()?.get(index).ok_or_else(|| {
+            Error::corrupted(format!("Page {}: element {index} out of range", self.id))
+        })
     }
 
     /// Retrieves the branch node by index
@@ -290,7 +300,7 @@ impl Page {
     pub(crate) fn leaf_page_elements(&self) -> Result<&[LeafPageElement], Error> {
         match self.data()? {
             PageData::Leaves(l) => Ok(l),
-            _ => Err("Flags are not leaves".into()),
+            _ => Err(Error::corrupted("Flags are not leaves")),
         }
     }
 
@@ -307,9 +317,9 @@ impl Page {
 
     /// Retrieves the leaf node by index
     pub(crate) fn leaf_page_element(&self, index: usize) -> Result<&LeafPageElement, Error> {
-        self.leaf_page_elements()?
-            .get(index)
-            .ok_or_else(|| format!("Page {}: element {index} out of range", self.id).into())
+        self.leaf_page_elements()?.get(index).ok_or_else(|| {
+            Error::corrupted(format!("Page {}: element {index} out of range", self.id))
+        })
     }
 
     /// Retrieves the leaf node by index
@@ -329,7 +339,7 @@ impl Page {
     pub(crate) fn meta(&self) -> Result<&Meta, Error> {
         match self.data()? {
             PageData::Meta(meta) => Ok(meta),
-            _ => Err("Flags are not meta".into()),
+            _ => Err(Error::corrupted("Flags are not meta")),
         }
     }
 
@@ -346,7 +356,7 @@ impl Page {
     pub(crate) fn freelist(&self) -> Result<&[PGID], Error> {
         match self.data()? {
             PageData::Freelist(list) => Ok(list),
-            _ => Err("Flags are not freelist".into()),
+            _ => Err(Error::corrupted("Flags are not freelist")),
         }
     }
 

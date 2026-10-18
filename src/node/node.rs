@@ -245,7 +245,9 @@ impl Node {
                     let id = page.id;
                     let txpgid = tx.pgid()?;
                     if id >= txpgid {
-                        return Err(format!("Pgid ({id}) above high water mark ({txpgid})").into());
+                        return Err(Error::corrupted(format!(
+                            "Pgid ({id}) above high water mark ({txpgid})"
+                        )));
                     }
                     *node.0.pgid.borrow_mut() = id;
                     node.write(page)?;
@@ -546,7 +548,9 @@ impl Node {
         let meta_pgid = self.bucket().ok_or("Bucket empty")?.tx()?.pgid()?;
 
         if pgid >= meta_pgid {
-            return Err(format!("Pgid ({pgid}) above high water mark ({meta_pgid})").into());
+            return Err(Error::corrupted(format!(
+                "Pgid ({pgid}) above high water mark ({meta_pgid})"
+            )));
         } else if old_key.is_empty() {
             return Err("Put: zero-length old key".into());
         } else if new_key.is_empty() {

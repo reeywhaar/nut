@@ -116,15 +116,17 @@ fn accessors_return_errors() {
     assert!(page.branch_page_element(0).is_ok());
     assert_eq!(
         page.branch_page_element(1).err(),
-        Some(Error::Unexpected(
+        Some(Error::CheckFail(vec![
             "Page 7: element 1 out of range".to_string()
-        ))
+        ]))
     );
 }
 
 #[test]
 fn check_bounds() {
-    let out_of_bounds = Some(Error::Unexpected("Page 3: data out of bounds".to_string()));
+    let out_of_bounds = Some(Error::CheckFail(vec![
+        "Page 3: data out of bounds".to_string(),
+    ]));
     let mut page = OwnedPage::new(4096);
     page.id = 3;
     page.flags = Flags::LEAVES;

@@ -205,6 +205,10 @@ impl Error {
     pub(crate) fn lock(name: &str) -> Self {
         Error::LockError(name.to_string())
     }
+
+    pub(crate) fn corrupted(detail: impl Into<String>) -> Self {
+        Error::CheckFail(vec![detail.into()])
+    }
 }
 
 pub(crate) fn io(op: &'static str) -> impl FnOnce(IOError) -> Error {

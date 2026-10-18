@@ -56,7 +56,10 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
                 Flags::BRANCHES => (),
                 Flags::LEAVES => (),
                 _ => {
-                    return Err(format!("Invalid page type: {}: {}", p.id, p.flags).into());
+                    return Err(Error::corrupted(format!(
+                        "Invalid page type: {}: {}",
+                        p.id, p.flags
+                    )));
                 }
             };
         }
@@ -145,7 +148,9 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         // Recursively search to the next page.
         let pgid = inodes
             .get(index)
-            .ok_or_else(|| format!("Page {}: element {index} out of range", p.id))?
+            .ok_or_else(|| {
+                Error::corrupted(format!("Page {}: element {index} out of range", p.id))
+            })?
             .pgid;
         self.search(key, pgid)?;
 

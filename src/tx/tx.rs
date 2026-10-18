@@ -194,7 +194,7 @@ impl Tx {
                 None
             })
         })
-        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
+        .map_err(|_| error.unwrap_or(Error::BucketNotFound))
     }
 
     /// Bucket retrieves a mutable bucket by name.
@@ -218,7 +218,7 @@ impl Tx {
                 None
             })
         })
-        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
+        .map_err(|_| error.unwrap_or(Error::BucketNotFound))
     }
 
     /// returns bucket keys for db
@@ -252,7 +252,7 @@ impl Tx {
         RwLockWriteGuard::try_map(bucket, |b| {
             b.create_bucket(key).map_err(|e| error = Some(e)).ok()
         })
-        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
+        .map_err(|_| error.unwrap_or(Error::BucketNotFound))
     }
 
     /// Creates a new bucket if it doesn't already exist.
@@ -278,7 +278,7 @@ impl Tx {
                 .map_err(|e| error = Some(e))
                 .ok()
         })
-        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
+        .map_err(|_| error.unwrap_or(Error::BucketNotFound))
     }
 
     /// Deletes a bucket.

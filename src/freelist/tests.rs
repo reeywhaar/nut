@@ -148,7 +148,9 @@ fn allocate_meta_page() {
     };
     assert_eq!(
         f.allocate(1),
-        Err(Error::Unexpected("Invalid page allocation: 1".to_string()))
+        Err(Error::CheckFail(vec![
+            "Invalid page allocation: 1".to_string()
+        ]))
     );
 }
 
@@ -159,7 +161,9 @@ fn read_wrong_page_type() {
     let mut f = FreeList::default();
     assert_eq!(
         f.read(&page),
-        Err(Error::Unexpected("Freelist flags incorrect: 2".to_string()))
+        Err(Error::CheckFail(vec![
+            "Freelist flags incorrect: 2".to_string()
+        ]))
     );
 }
 

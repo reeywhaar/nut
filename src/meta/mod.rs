@@ -79,17 +79,15 @@ impl Meta {
 
     pub(crate) fn write(&mut self, p: &mut Page) -> Result<(), Error> {
         if self.root.root >= self.pgid {
-            return Err(format!(
+            return Err(Error::corrupted(format!(
                 "Root bucket pgid ({}) above high water mark ({})",
                 self.root.root, self.pgid
-            )
-            .into());
+            )));
         } else if self.freelist >= self.pgid {
-            return Err(format!(
+            return Err(Error::corrupted(format!(
                 "Freelist pgid ({}) above high water mark ({})",
                 self.freelist, self.pgid
-            )
-            .into());
+            )));
         }
 
         // Page id is either going to be 0 or 1 which we can determine by the transaction ID.

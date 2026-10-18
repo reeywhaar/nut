@@ -103,11 +103,11 @@ impl<'a> DB {
             file.read_exact(&mut buf)?;
             let page = Page::from_buf(&buf);
             if page.flags != Flags::META {
-                return Err("Database format unknown".into());
+                return Err(Error::Invalid);
             }
             page.meta()?.page_size as usize
         };
-        let page_size = check_page_size(page_size)?;
+        let page_size = check_page_size(page_size).map_err(Error::corrupted)?;
 
         let minimal_file_size = page_size as u64 * 4;
         if options.read_only {
@@ -115,10 +115,7 @@ impl<'a> DB {
                 .allocated_size()
                 .map_err(io("Cannot get file allocated size"))?;
             if size < minimal_file_size {
-                return Err(format!(
-                    "Minimal file size {size} is less than required: {minimal_file_size}"
-                )
-                .into());
+                return Err(Error::FileTooSmall);
             }
         } else {
             file.allocate(minimal_file_size)
@@ -650,7 +647,7 @@ impl<'a> DB {
         if !self.read_only() {
             file.get_ref()
                 .allocate(size)
-                .map_err(io("Can't allocate space"))?;
+                .map_err(|_| Error::ResizeFail)?;
         }
 
         // TODO: madvise
@@ -678,7 +675,7 @@ impl<'a> DB {
         if let Err(e) = check0
             && check1.is_err()
         {
-            return Err(format!("Mmap fail: {e}").into());
+            return Err(e);
         }
 
         Ok(())
@@ -694,7 +691,7 @@ impl<'a> DB {
 
         // Verify the requested size is not above the maximum allowed.
         if size > MAX_MAP_SIZE {
-            return Err("Mmap too large".into());
+            return Err(Error::ResizeFail);
         };
 
         // If larger than 1GB then grow by 1GB at a time.
@@ -719,7 +716,7 @@ impl<'a> DB {
     }
 
     pub(crate) fn sync(&mut self) -> Result<(), Error> {
-        self.0.file.write().flush().map_err(io("Can't sync data"))
+        self.0.file.write().flush().map_err(|_| Error::SyncFail)
     }
 
     pub fn stats(&self) -> Stats {
@@ -769,7 +766,7 @@ impl<'a> DB {
         let (page, available) = self.mapped_page(id)?;
         let len = (u64::from(page.overflow) + 1) * self.0.page_size as u64;
         if len > available {
-            return Err(format!("Page {id}: out of bounds").into());
+            return Err(Error::corrupted(format!("Page {id}: out of bounds")));
         }
         Ok((page, len as usize))
     }
@@ -787,7 +784,7 @@ impl<'a> DB {
                 pos.checked_add(Page::header_size() as u64)
                     .is_some_and(|end| end <= mmap_len)
             })
-            .ok_or_else(|| format!("Page {id}: out of bounds"))?;
+            .ok_or_else(|| Error::corrupted(format!("Page {id}: out of bounds")))?;
         let page = RwLockReadGuard::map(mmap, |mmap| Page::from_buf(&mmap[pos as usize..]));
         Ok((page, mmap_len - pos))
     }
@@ -801,8 +798,7 @@ impl<'a> DB {
 
     pub fn meta(&self) -> Result<Meta, Error> {
         let pages = [self.page(0), self.page(1)];
-        newest_valid_meta(pages.iter().filter_map(|page| page.as_deref().ok()))
-            .ok_or_else(|| "nut::DB.meta(): invalid meta pages".into())
+        newest_valid_meta(pages.iter().filter_map(|page| page.as_deref().ok())).ok_or(Error::NoMeta)
     }
 
     pub(crate) fn allocate(&mut self, count: u64, tx: &mut Tx) -> Result<OwnedPage, Error> {
@@ -874,7 +870,7 @@ impl<'a> DB {
             .map_err(|_e| Error::ResizeFail)?;
 
         if !self.0.no_grow_sync {
-            file.get_ref().sync_all().map_err(io("Can't flush file"))?;
+            file.get_ref().sync_all().map_err(|_| Error::SyncFail)?;
         }
 
         *self.0.file_size.write() = file

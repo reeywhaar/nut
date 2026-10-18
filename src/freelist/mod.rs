@@ -66,7 +66,7 @@ impl FreeList {
         if let Some(index) = find_contiguous(&self.ids, span as usize) {
             let pgid = self.ids[index];
             if pgid <= 1 {
-                return Err(format!("Invalid page allocation: {pgid}").into());
+                return Err(Error::corrupted(format!("Invalid page allocation: {pgid}")));
             };
             self.ids.drain(index..index + span as usize);
             // Remove from the free cache.
@@ -83,7 +83,10 @@ impl FreeList {
     /// If the page is already free then a panic will occur.
     pub(crate) fn free(&mut self, txid: TXID, p: &Page) -> Result<(), Error> {
         if p.id <= 1 {
-            return Err(format!("Cannot free page 0 or 1: {}", p.id).into());
+            return Err(Error::corrupted(format!(
+                "Cannot free page 0 or 1: {}",
+                p.id
+            )));
         }
 
         // Free page and all its overflow pages.
@@ -92,7 +95,7 @@ impl FreeList {
         for id in p.id..=max {
             // Verify that page is not already free.
             if self.cache.contains_key(&id) {
-                return Err(format!("Page {id} already freed").into());
+                return Err(Error::corrupted(format!("Page {id} already freed")));
             }
 
             // Add to the freelist and cache.
@@ -147,7 +150,10 @@ impl FreeList {
     /// read initializes the freelist from a freelist page.
     pub(crate) fn read(&mut self, p: &Page) -> Result<(), Error> {
         if p.flags != Flags::FREELIST {
-            return Err(format!("Freelist flags incorrect: {}", p.flags.bits()).into());
+            return Err(Error::corrupted(format!(
+                "Freelist flags incorrect: {}",
+                p.flags.bits()
+            )));
         }
         let mut idx = 0;
         let mut count = p.count as usize;

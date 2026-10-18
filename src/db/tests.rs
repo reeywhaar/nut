@@ -2,8 +2,11 @@ use super::common::{Batch, Call};
 use super::{CheckMode, DB, DBBuilder, WeakDB};
 use crate::consts::{MAGIC, MAX_MAP_SIZE};
 use crate::errors::Error;
+use crate::meta::Meta;
+use crate::page::Page;
 use crate::test_utils::temp_file;
 use crate::tx::Tx;
+use std::mem::offset_of;
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
@@ -336,9 +339,9 @@ fn corrupted_page_returns_error() {
     let tx = db.begin_tx().unwrap();
     assert_eq!(
         tx.bucket(b"bucket").err(),
-        Some(Error::Unexpected(format!(
+        Some(Error::CheckFail(vec![format!(
             "Page {root}: data out of bounds"
-        )))
+        )]))
     );
 }
 
@@ -365,7 +368,33 @@ fn invalid_page_size_is_rejected() {
     drop(file);
     assert_eq!(
         DBBuilder::new(&path).build().err(),
-        Some(Error::Unexpected("Invalid page size: 8".to_string()))
+        Some(Error::CheckFail(vec!["Invalid page size: 8".to_string()]))
     );
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn known_errors_use_defined_variants() {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let path = {
+        let db = DBBuilder::new(temp_file()).build().unwrap();
+        let tx = db.begin_tx().unwrap();
+        assert_eq!(tx.bucket(b"missing").err(), Some(Error::BucketNotFound));
+        drop(tx);
+        db.path().to_owned()
+    };
+
+    let page_size = page_size::get() as u64;
+    let checksum_offset = Page::header_size() as u64 + offset_of!(Meta, checksum) as u64;
+    let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    for page in [0, 1] {
+        file.seek(SeekFrom::Start(page * page_size + checksum_offset))
+            .unwrap();
+        file.write_all(&1u64.to_ne_bytes()).unwrap();
+    }
+    drop(file);
+
+    assert_eq!(DBBuilder::new(&path).build().err(), Some(Error::NoMeta));
     std::fs::remove_file(&path).unwrap();
 }

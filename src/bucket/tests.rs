@@ -144,7 +144,9 @@ fn open_bucket_checks_value() {
     let bucket = bucket_mock(WeakTx::new());
     assert_eq!(
         bucket.open_bucket(vec![0; 8]).err(),
-        Some(Error::Unexpected("Bucket value too short: 8".to_string()))
+        Some(Error::CheckFail(vec![
+            "Bucket value too short: 8".to_string()
+        ]))
     );
 
     let mut value = vec![0u8; 16];
@@ -157,6 +159,8 @@ fn open_bucket_checks_value() {
     }
     assert_eq!(
         bucket.open_bucket(value).err(),
-        Some(Error::Unexpected("Page 0: data out of bounds".to_string()))
+        Some(Error::CheckFail(vec![
+            "Page 0: data out of bounds".to_string()
+        ]))
     );
 }
