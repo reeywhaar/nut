@@ -249,7 +249,7 @@ impl Node {
                         return Err(format!("Pgid ({id}) above high water mark ({txpgid})").into());
                     }
                     *node.0.pgid.borrow_mut() = id;
-                    node.write(page);
+                    node.write(page)?;
                     node.0.spilled.store(true, Ordering::Release);
                 }
 
@@ -261,7 +261,7 @@ impl Node {
                         okey = Some(nkey.clone());
                     }
                     let pgid = *node.0.pgid.borrow();
-                    p.put(okey.unwrap().as_slice(), &nkey, vec![], pgid, 0);
+                    p.put(okey.unwrap().as_slice(), &nkey, vec![], pgid, 0)?;
                     if nkey.is_empty() {
                         return Err("Spill: zero-length node key".into());
                     }
@@ -347,7 +347,7 @@ impl Node {
                         .nodes
                         .borrow_mut()
                         .remove(&child.0.pgid.borrow());
-                    child.free();
+                    child.free().unwrap();
                 }
 
                 return;
@@ -362,7 +362,7 @@ impl Node {
             parent.del(&key);
             parent.remove_child(self);
             self.bucket_mut().unwrap().nodes.borrow_mut().remove(&pgid);
-            self.free();
+            self.free().unwrap();
             parent.rebalance();
             return;
         }
@@ -412,7 +412,7 @@ impl Node {
                 .nodes
                 .borrow_mut()
                 .remove(&target.pgid());
-            target.free();
+            target.free().unwrap();
         } else {
             for pgid in target.0.inodes.borrow().iter().map(|i| i.pgid) {
                 if let Some(child) = self.bucket_mut().unwrap().nodes.borrow_mut().get_mut(&pgid) {
@@ -438,7 +438,7 @@ impl Node {
                 .nodes
                 .borrow_mut()
                 .remove(&self.pgid());
-            self.free();
+            self.free().unwrap();
         }
 
         self.parent().unwrap().rebalance();
@@ -459,19 +459,20 @@ impl Node {
     }
 
     /// Adds the node's underlying page to the freelist.
-    pub fn free(&mut self) {
+    pub fn free(&mut self) -> Result<(), Error> {
         if *self.0.pgid.borrow() == 0 {
-            return;
+            return Ok(());
         };
         {
-            let bucketmut = self.bucket_mut().unwrap();
-            let tx = bucketmut.tx().unwrap();
+            let bucketmut = self.bucket_mut().ok_or("Bucket empty")?;
+            let tx = bucketmut.tx()?;
             let txid = tx.id();
-            let page = unsafe { &*tx.page(*self.0.pgid.borrow()).unwrap() };
-            let db = tx.db().unwrap();
-            db.0.freelist.write().free(txid, page).unwrap();
+            let page = unsafe { &*tx.page(*self.0.pgid.borrow())? };
+            let db = tx.db()?;
+            db.0.freelist.write().free(txid, page)?;
         }
         *self.0.pgid.borrow_mut() = 0;
+        Ok(())
     }
 
     pub(super) fn bucket<'a, 'b: 'a>(&'a self) -> Option<&'b Bucket> {
@@ -526,15 +527,22 @@ impl Node {
     }
 
     /// Inserts a key/value.
-    pub fn put(&mut self, old_key: &[u8], new_key: &[u8], value: Vec<u8>, pgid: PGID, flags: u32) {
-        let meta_pgid = self.bucket().unwrap().tx().unwrap().pgid();
+    pub fn put(
+        &mut self,
+        old_key: &[u8],
+        new_key: &[u8],
+        value: Vec<u8>,
+        pgid: PGID,
+        flags: u32,
+    ) -> Result<(), Error> {
+        let meta_pgid = self.bucket().ok_or("Bucket empty")?.tx()?.pgid();
 
         if pgid >= meta_pgid {
-            panic!("pgid ({}) above high water mark ({})", pgid, meta_pgid);
+            return Err(format!("Pgid ({pgid}) above high water mark ({meta_pgid})").into());
         } else if old_key.is_empty() {
-            panic!("put: zero-length old key")
+            return Err("Put: zero-length old key".into());
         } else if new_key.is_empty() {
-            panic!("put: zero-length new key")
+            return Err("Put: zero-length new key".into());
         }
 
         let mut inodes = self.0.inodes.borrow_mut();
@@ -552,6 +560,7 @@ impl Node {
         inode.value = value;
         inode.flags = flags;
         inode.pgid = pgid;
+        Ok(())
     }
 
     // Removes a key from the node.
@@ -573,7 +582,7 @@ impl Node {
     }
 
     /// Writes the items onto one or more pages.
-    pub(crate) fn write(&self, p: &mut Page) {
+    pub(crate) fn write(&self, p: &mut Page) -> Result<(), Error> {
         if self.is_leaf() {
             p.flags |= Flags::LEAVES;
         } else {
@@ -583,13 +592,13 @@ impl Node {
         let inodes = self.0.inodes.borrow_mut();
 
         if inodes.len() >= 0xFFFF {
-            panic!("inode overflow: {} (pgid={})", inodes.len(), p.id);
+            return Err(format!("Inode overflow: {} (pgid={})", inodes.len(), p.id).into());
         }
 
         p.count = inodes.len() as u16;
 
         if inodes.is_empty() {
-            return;
+            return Ok(());
         }
 
         let mut bptr = unsafe {
@@ -599,7 +608,9 @@ impl Node {
         let is_leaf = self.is_leaf();
         let pgid = p.id;
         for (i, item) in inodes.iter().enumerate() {
-            assert!(!item.key.is_empty(), "write: zero-length inode key");
+            if item.key.is_empty() {
+                return Err("Write: zero-length inode key".into());
+            }
 
             if is_leaf {
                 let elem = p.leaf_page_element_mut(i);
@@ -614,7 +625,9 @@ impl Node {
                 elem.pos = unsafe { bptr.sub(el_ptr as usize) } as u32;
                 elem.ksize = item.key.len() as u32;
                 elem.pgid = item.pgid;
-                assert!(elem.pgid != pgid, "write: circular dependency occurred");
+                if elem.pgid == pgid {
+                    return Err("Write: circular dependency occurred".into());
+                }
             }
 
             let (klen, vlen) = (item.key.len(), item.value.len());
@@ -626,6 +639,7 @@ impl Node {
                 bptr = bptr.add(vlen);
             }
         }
+        Ok(())
     }
 
     /// Returns the index of a given child node.

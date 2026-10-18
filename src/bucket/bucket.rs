@@ -237,8 +237,8 @@ impl Bucket {
             bucket.root_node = Some(NodeBuilder::new(&raw const bucket).is_leaf(true).build());
             bucket.fill_percent = Self::DEFAULT_FILL_PERCENT;
 
-            let value = bucket.write();
-            cursor.node()?.put(key, key, value, 0, Self::FLAG);
+            let value = bucket.write()?;
+            cursor.node()?.put(key, key, value, 0, Self::FLAG)?;
             self.page = None;
         }
 
@@ -391,7 +391,7 @@ impl Bucket {
         }
 
         // Insert into node.
-        c.node()?.put(key, key, value, 0, 0);
+        c.node()?.put(key, key, value, 0, 0)?;
 
         Ok(())
     }
@@ -643,7 +643,7 @@ impl Bucket {
             // like a normal bucket and make the parent value a pointer to the page.
             let value = if child.inlineable() {
                 child.free();
-                child.write()
+                child.write()?
             } else {
                 child.spill()?;
 
@@ -673,7 +673,7 @@ impl Bucket {
             if !item.is_bucket() {
                 return Err(format!("Unexpected bucket header flag: {}", item.flags).into());
             }
-            c.node()?.put(name, name, value, 0, Self::FLAG);
+            c.node()?.put(name, name, value, 0, Self::FLAG)?;
         }
 
         // Ignore if there's not a materialized root node.
@@ -731,10 +731,10 @@ impl Bucket {
     }
 
     /// Allocates and writes a bucket to a byte slice.
-    fn write(&mut self) -> Vec<u8> {
+    fn write(&mut self) -> Result<Vec<u8>, Error> {
         // TODO: optimize this page alloc things
         // Allocate the appropriate size.
-        let n = self.root_node.as_ref().unwrap();
+        let n = self.root_node.as_ref().ok_or("Root node empty")?;
         let node_size = n.size();
         let mut value = vec![0u8; IBucket::SIZE + node_size];
 
@@ -746,10 +746,10 @@ impl Bucket {
         {
             let page_buf = &mut value[IBucket::SIZE..];
             let page = Page::from_buf_mut(page_buf);
-            n.write(page);
+            n.write(page)?;
         }
 
-        value
+        Ok(value)
     }
 
     /// Attempts to balance all nodes.
@@ -811,7 +811,7 @@ impl Bucket {
                 let txid = tx.id();
                 db.0.freelist.write().free(txid, p).unwrap()
             }
-            Either::Right(n) => n.clone().free(),
+            Either::Right(n) => n.clone().free().unwrap(),
         });
         self.bucket.root = 0;
     }

@@ -17,10 +17,10 @@ fn create() {
     let tx = tx_mock();
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
-    n.put(b"baz", b"baz", [1, 22, 3].to_vec(), 0, 0);
-    n.put(b"foo", b"foo", b"barack".to_vec(), 0, 0);
-    n.put(b"bar", b"bar", b"bill".to_vec(), 0, 0);
-    n.put(b"foo", b"fold", b"donald".to_vec(), 0, 1);
+    n.put(b"baz", b"baz", [1, 22, 3].to_vec(), 0, 0).unwrap();
+    n.put(b"foo", b"foo", b"barack".to_vec(), 0, 0).unwrap();
+    n.put(b"bar", b"bar", b"bill".to_vec(), 0, 0).unwrap();
+    n.put(b"foo", b"fold", b"donald".to_vec(), 0, 1).unwrap();
 
     let inodes = n.0.inodes.borrow();
     assert_eq!(inodes.len(), 3);
@@ -100,21 +100,24 @@ fn write_page() {
         b"que".to_vec(),
         0,
         Flags::LEAVES.bits() as u32,
-    );
+    )
+    .unwrap();
     n.put(
         b"ricki",
         b"ricki",
         b"lake".to_vec(),
         0,
         Flags::LEAVES.bits() as u32,
-    );
+    )
+    .unwrap();
     n.put(
         b"john",
         b"john",
         b"johnson".to_vec(),
         0,
         Flags::LEAVES.bits() as u32,
-    );
+    )
+    .unwrap();
 
     let mut page = {
         let mut page = OwnedPage::new(4096);
@@ -123,7 +126,7 @@ fn write_page() {
         page.flags = Flags::LEAVES;
         page
     };
-    n.write(&mut page);
+    n.write(&mut page).unwrap();
 
     let nodes = unsafe {
         std::slice::from_raw_parts_mut(page.get_data_mut_ptr().cast::<LeafPageElement>(), 3)
@@ -157,11 +160,16 @@ fn split_two() {
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
-    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0);
+    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
 
     // Split between 2 & 3.
     let next = n.split_two(100).unwrap();
@@ -175,11 +183,16 @@ fn split_two_fail() {
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
-    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0);
+    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
 
     // Split between 2 & 3.
     let next = n.split_two(4096).unwrap();
@@ -193,11 +206,16 @@ fn split() {
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
-    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0);
+    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000003", b"00000003", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000004", b"00000004", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000005", b"00000005", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
 
     // Split between 2 & 3.
     let parent = n.split(100).unwrap();
@@ -224,7 +242,8 @@ fn split_big() {
             b"0123456701234567".to_vec(),
             0,
             0,
-        );
+        )
+        .unwrap();
     }
 
     let parent = n.split(4096).unwrap().unwrap();
@@ -238,8 +257,10 @@ fn split_min_keys() {
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
-    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
+    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
 
     let parent = n.split(20).unwrap();
     assert!(parent.is_none());
@@ -251,11 +272,16 @@ fn split_single_page() {
     let bucket = bucket_mock(WeakTx::from(&tx));
     let mut n = node_mock(&raw const bucket);
     n.0.is_leaf.store(true, Ordering::Release);
-    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
-    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0);
+    n.put(b"00000001", b"00000001", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
+    n.put(b"00000002", b"00000002", b"0123456701234567".to_vec(), 0, 0)
+        .unwrap();
 
     let parent = n.split(4096).unwrap();
     assert!(parent.is_none());
