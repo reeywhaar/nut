@@ -20,15 +20,15 @@ fn create() {
     assert!(tx.bucket(b"foo").is_err());
 
     let mut bucket = tx.create_bucket(b"foo").unwrap();
-    assert!(bucket.get(b"bar").is_none());
+    assert!(bucket.try_get(b"bar").unwrap().is_none());
 
     bucket.put(b"foo", b"jaja".to_vec()).unwrap();
-    assert!(bucket.get(b"foo").is_some());
-    assert_eq!(bucket.get(b"foo").unwrap(), b"jaja");
+    assert!(bucket.try_get(b"foo").unwrap().is_some());
+    assert_eq!(bucket.try_get(b"foo").unwrap().unwrap(), b"jaja");
 
     bucket.create_bucket(b"subbucket").unwrap();
-    assert!(bucket.get(b"subbucket").is_none());
-    assert!(bucket.bucket(b"subbucket").is_some());
+    assert!(bucket.try_get(b"subbucket").unwrap().is_none());
+    assert!(bucket.try_bucket(b"subbucket").unwrap().is_some());
 }
 
 #[test]
@@ -52,13 +52,17 @@ fn create_nested_buckets() {
         assert!(
             tx.bucket(b"foo")
                 .unwrap()
-                .bucket(b"foob")
+                .try_bucket(b"foob")
                 .unwrap()
-                .bucket(b"fooc")
                 .unwrap()
-                .bucket(b"food")
+                .try_bucket(b"fooc")
                 .unwrap()
-                .bucket(b"fooe")
+                .unwrap()
+                .try_bucket(b"food")
+                .unwrap()
+                .unwrap()
+                .try_bucket(b"fooe")
+                .unwrap()
                 .is_some()
         );
 
@@ -71,13 +75,17 @@ fn create_nested_buckets() {
     assert!(
         tx.bucket(b"foo")
             .unwrap()
-            .bucket(b"foob")
+            .try_bucket(b"foob")
             .unwrap()
-            .bucket(b"fooc")
             .unwrap()
-            .bucket(b"food")
+            .try_bucket(b"fooc")
             .unwrap()
-            .bucket(b"fooe")
+            .unwrap()
+            .try_bucket(b"food")
+            .unwrap()
+            .unwrap()
+            .try_bucket(b"fooe")
+            .unwrap()
             .is_some()
     );
 }
@@ -89,9 +97,9 @@ fn delete_value() {
     {
         let mut bucket = tx.create_bucket(b"bucket").unwrap();
         bucket.put(b"haley", b"smith".to_vec()).unwrap();
-        assert_eq!(bucket.get(b"haley").unwrap(), b"smith");
+        assert_eq!(bucket.try_get(b"haley").unwrap().unwrap(), b"smith");
         bucket.delete(b"haley").unwrap();
-        assert_eq!(bucket.get(b"haley"), None);
+        assert_eq!(bucket.try_get(b"haley").unwrap(), None);
     }
     tx.commit().unwrap();
 }
@@ -103,7 +111,7 @@ fn delete_bucket_err() {
     {
         let mut bucket = tx.create_bucket(b"bucket").unwrap();
         bucket.create_bucket(b"stan").unwrap();
-        bucket.bucket(b"stan").unwrap();
+        bucket.try_bucket(b"stan").unwrap().unwrap();
         assert_eq!(bucket.delete(b"stan"), Err(Error::IncompatibleValue));
     }
     tx.commit().unwrap();
@@ -119,6 +127,7 @@ fn delete_missing_bucket_after_last_key() {
 }
 
 #[test]
+#[expect(deprecated)]
 fn try_variants() {
     let mut db = db_mock().build().unwrap();
     {

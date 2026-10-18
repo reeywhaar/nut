@@ -56,7 +56,7 @@
 //!
 //! // getting bucket
 //! let flowers = tx.bucket(b"flowers").unwrap();
-//! let data = flowers.get(b"iris").unwrap();
+//! let data = flowers.try_get(b"iris").unwrap().unwrap();
 //! assert_eq!(
 //!   data,
 //!   &b"song by American alternative rock band Goo Goo Dolls"[..]
@@ -71,8 +71,8 @@
 //! let mut tx = db.begin_tx().unwrap();
 //!
 //! {
-//!   // .buckets() available to conveniently retrieve all buckets keys
-//!   let bucket_names = tx.buckets(); // returns Vec<Vec<u8>>
+//!   // .try_buckets() available to conveniently retrieve all buckets keys
+//!   let bucket_names = tx.try_buckets().unwrap(); // returns Vec<Vec<u8>>
 //!
 //!   // bucket key is any binary data, not only string
 //!   assert_eq!(bucket_names, vec!["flowers".as_bytes().to_vec()]);

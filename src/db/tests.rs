@@ -64,7 +64,7 @@ fn open_existing() {
     assert_eq!(db.meta().unwrap().root.root, 9);
     {
         let tx = db.begin_tx().unwrap();
-        let buckets = tx.buckets();
+        let buckets = tx.try_buckets().unwrap();
         assert_eq!(buckets.len(), 7);
         tx.check_sync().unwrap();
     }
@@ -83,7 +83,7 @@ fn open_existing_2() {
     db.meta().unwrap().validate().unwrap();
     {
         let tx = db.begin_tx().unwrap();
-        let buckets = tx.buckets();
+        let buckets = tx.try_buckets().unwrap();
         assert_eq!(buckets.len(), 13);
         tx.check_sync().unwrap();
     }
@@ -261,7 +261,7 @@ fn try_stats_reports_lock_error() {
 #[test]
 fn info_points_to_mmap() {
     let db = db_mock().build().unwrap();
-    assert_eq!(db.info().data, db.0.mmap.read().as_ptr());
+    assert_eq!(db.try_info().unwrap().data, db.0.mmap.read().as_ptr());
 }
 
 #[test]

@@ -23,7 +23,7 @@ fn perform_read(number_of_threads: usize, number_of_values: usize) {
                 for i in 10..10 + number_of_values {
                     let expected = format!("{}", i * 100000);
                     let key = format!("{i}");
-                    let value = bucket.get(key.as_bytes()).unwrap();
+                    let value = bucket.try_get(key.as_bytes()).unwrap().unwrap();
                     assert_eq!(expected.as_bytes(), value);
                 }
                 Ok(())
@@ -147,7 +147,7 @@ fn multiple_writers_multiple_readers() {
                 let tx = db.begin_tx().unwrap();
                 let bucket = tx.bucket(b"bucket").unwrap();
                 for i in 0..n_values {
-                    let _ = bucket.get(format!("{i}").as_bytes());
+                    let _ = bucket.try_get(format!("{i}").as_bytes()).unwrap();
                     thread::sleep(Duration::from_nanos(15));
                 }
             }));

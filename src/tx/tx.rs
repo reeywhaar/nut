@@ -219,6 +219,7 @@ impl Tx {
     }
 
     /// returns bucket keys for db
+    #[deprecated(since = "0.1.6", note = "use `try_buckets` instead")]
     pub fn buckets(&self) -> Vec<Vec<u8>> {
         self.try_buckets().unwrap()
     }

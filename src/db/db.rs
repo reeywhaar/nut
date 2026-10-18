@@ -719,6 +719,7 @@ impl<'a> DB {
         self.0.file.write().flush().map_err(|_| Error::SyncFail)
     }
 
+    #[deprecated(since = "0.1.6", note = "use `try_stats` instead")]
     pub fn stats(&self) -> Stats {
         self.try_stats().unwrap()
     }
@@ -733,6 +734,7 @@ impl<'a> DB {
             .clone())
     }
 
+    #[deprecated(since = "0.1.6", note = "use `try_info` instead")]
     pub fn info(&self) -> Info {
         self.try_info().unwrap()
     }

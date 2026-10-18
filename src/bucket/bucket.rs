@@ -139,6 +139,7 @@ impl Bucket {
 
     /// Retrieves a nested bucket by name.
     /// Returns None if the bucket does not exist or found item is not bucket.
+    #[deprecated(since = "0.1.6", note = "use `try_bucket` instead")]
     pub fn bucket(&self, key: &[u8]) -> Option<&Bucket> {
         self.try_bucket(key).unwrap()
     }
@@ -150,6 +151,7 @@ impl Bucket {
 
     /// Retrieves a nested mutable bucket by name.
     /// Returns None if the bucket does not exist or found item is not bucket.
+    #[deprecated(since = "0.1.6", note = "use `try_bucket_mut` instead")]
     pub fn bucket_mut(&mut self, key: &[u8]) -> Option<&mut Bucket> {
         self.try_bucket_mut(key).unwrap()
     }
@@ -258,8 +260,8 @@ impl Bucket {
             self.page = None;
         }
 
-        self.bucket_mut(key)
-            .ok_or_else(|| Error::Unexpected("cannot find bucket".to_string()))
+        self.try_bucket_mut(key)?
+            .ok_or_else(|| Error::Unexpected("Cannot find bucket".to_string()))
     }
 
     /// Creates bucket if it not exists
@@ -267,8 +269,8 @@ impl Bucket {
         match unsafe { &mut *(self as *mut Self) }.create_bucket(key) {
             Ok(b) => Ok(b),
             Err(Error::BucketExists) => self
-                .bucket_mut(key)
-                .ok_or_else(|| Error::Unexpected("can't find bucket".to_string())),
+                .try_bucket_mut(key)?
+                .ok_or_else(|| Error::Unexpected("Cannot find bucket".to_string())),
             v => v,
         }
     }
@@ -322,6 +324,7 @@ impl Bucket {
     }
 
     /// Returns list of subbuckets' keys
+    #[deprecated(since = "0.1.6", note = "use `try_buckets` instead")]
     pub fn buckets(&self) -> Vec<Vec<u8>> {
         self.try_buckets().unwrap()
     }
@@ -340,6 +343,12 @@ impl Bucket {
 
     /// Retrieves the value for a key in the bucket.
     /// Returns a None value if the key does not exist or if the key is a nested bucket.
+    #[deprecated(since = "0.1.6", note = "use `try_get` instead")]
+    pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
+        self.try_get(key).unwrap()
+    }
+
+    /// Same as [`Bucket::get`], but returns an error instead of panicking.
     ///
     /// # Example
     ///
@@ -350,13 +359,8 @@ impl Bucket {
     /// let tx = db.begin_tx().unwrap();
     /// let flowers = tx.bucket(b"flowers").unwrap();
     ///
-    /// assert_eq!(flowers.get(b"irises").unwrap(), &b"Iris is a genus of species of flowering plants"[..]);
+    /// assert_eq!(flowers.try_get(b"irises").unwrap().unwrap(), &b"Iris is a genus of species of flowering plants"[..]);
     /// ```
-    pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.try_get(key).unwrap()
-    }
-
-    /// Same as [`Bucket::get`], but returns an error instead of panicking.
     pub fn try_get(&self, key: &[u8]) -> Result<Option<&[u8]>, Error> {
         let (ckey, value, flags) = self.cursor()?.seek(key)?.unwrap();
         // let value = value.map(|v| v.to_vec());
@@ -518,6 +522,7 @@ impl Bucket {
     }
 
     /// Returns stats on a bucket.
+    #[deprecated(since = "0.1.6", note = "use `try_stats` instead")]
     pub fn stats(&self) -> BucketStats {
         self.try_stats().unwrap()
     }

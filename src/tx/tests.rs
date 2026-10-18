@@ -143,9 +143,18 @@ fn commit_ensure() {
         .unwrap();
     db.view(Box::new(|tx| -> Result<(), String> {
         let bucket = tx.bucket(b"bucket").unwrap();
-        assert_eq!(bucket.get(b"donald").expect("no donald"), b"trump");
-        assert_eq!(bucket.get(b"barack").expect("no barack"), b"obama");
-        assert_eq!(bucket.get(b"thomas").expect("no thomas"), b"jefferson");
+        assert_eq!(
+            bucket.try_get(b"donald").unwrap().expect("no donald"),
+            b"trump"
+        );
+        assert_eq!(
+            bucket.try_get(b"barack").unwrap().expect("no barack"),
+            b"obama"
+        );
+        assert_eq!(
+            bucket.try_get(b"thomas").unwrap().expect("no thomas"),
+            b"jefferson"
+        );
         Ok(())
     }))
     .unwrap();
