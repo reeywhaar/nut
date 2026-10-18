@@ -1,4 +1,4 @@
-use fs2::FileExt;
+use fs4::FileExt;
 use lock_api::{RawMutex, RawRwLock};
 use parking_lot::{MappedRwLockReadGuard, Mutex, RwLock, RwLockReadGuard};
 use std::fs::File;
@@ -90,9 +90,9 @@ impl<'a> DB {
             (!path.exists()) || file.metadata().map_err(|_| "Can't read metadata")?.len() == 0;
 
         if !options.read_only {
-            file.lock_exclusive().map_err(|_e| "Cannot lock db file")?;
+            file.lock().map_err(|_e| "Cannot lock db file")?;
         } else {
-            fs2::FileExt::lock_shared(&file).map_err(|_e| "Cannot lock db file")?;
+            file.lock_shared().map_err(|_e| "Cannot lock db file")?;
         };
 
         let page_size = if needs_initialization {
@@ -351,7 +351,7 @@ impl<'a> DB {
 
         let file = file.get_ref();
 
-        fs2::FileExt::unlock(file).map_err(|_| "Can't unlock db file")?;
+        file.unlock().map_err(|_| "Can't unlock db file")?;
 
         if self.0.autoremove && self.0.path.exists() {
             std::fs::remove_file(&self.0.path).map_err(|_| "Can't remove file")?;

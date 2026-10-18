@@ -5,7 +5,7 @@ authors = ["Vyrtsev Mikhail <reeywhaar@gmail.com>"]
 homepage = "https://github.com/Reeywhaar/nut"
 description = "Bolt DB Port in Rust"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.89"
 license = "MIT"
 exclude = ["test_data"]
 
@@ -25,7 +25,7 @@ cli = ["dep:clap", "dep:hexdump", "dep:anstyle"]
 fnv = "1.0.7"
 poolcache = "0.1.1"
 memoffset = "0.9.1"
-fs2 = "0.4.3"
+fs4 = "1.1.0"
 page_size = "0.6.0"
 memmap2 = "0.9.11"
 scopeguard = "1.2.0"
