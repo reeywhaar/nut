@@ -54,6 +54,7 @@ impl TxBuilder {
             writable: self.writable,
             managed: AtomicBool::new(false),
             check: AtomicBool::new(self.check),
+            closed: AtomicBool::new(self.db.upgrade().is_none()),
             db: RwLock::new(self.db),
             meta: RwLock::new(meta),
             root: RwLock::new(Bucket::new(WeakTx::new())),

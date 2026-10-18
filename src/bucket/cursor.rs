@@ -275,7 +275,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// If the bucket is empty then a nil key and value are returned.
     /// The returned key and value are only valid for the life of the transaction.
     pub fn last(&self) -> Result<CursorItem<'a>, Error> {
-        if !self.bucket.tx()?.opened()? {
+        if !self.bucket.tx()?.opened() {
             return Err(Error::TxClosed);
         };
         {
@@ -330,7 +330,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     ///
     /// The returned key and value are only valid for the life of the transaction.
     pub fn next(&self) -> Result<CursorItem<'a>, Error> {
-        if !self.bucket.tx()?.opened()? {
+        if !self.bucket.tx()?.opened() {
             return Err(Error::TxClosed);
         };
         let mut item = self.next_leaf()?;
@@ -378,7 +378,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// If the cursor is at the beginning of the bucket then a nil key and value are returned.
     /// The returned key and value are only valid for the life of the transaction.
     pub fn prev(&self) -> Result<CursorItem<'a>, Error> {
-        if !self.bucket.tx()?.opened()? {
+        if !self.bucket.tx()?.opened() {
             return Err(Error::TxClosed);
         };
         {
@@ -443,7 +443,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Moves the cursor to a given key and returns it.
     /// If the key does not exist then the next key is used.
     pub(crate) fn seek_to_item(&self, seek: &[u8]) -> Result<CursorItem<'a>, Error> {
-        if !self.bucket.tx()?.opened()? {
+        if !self.bucket.tx()?.opened() {
             return Err(Error::TxClosed);
         };
 
@@ -462,7 +462,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Removes the current key/value under the cursor from the bucket.
     /// Delete fails if current key/value is a bucket or if the transaction is not writable.
     pub fn delete(&mut self) -> Result<(), Error> {
-        if !self.bucket.tx()?.opened()? {
+        if !self.bucket.tx()?.opened() {
             return Err(Error::TxClosed);
         };
         if !self.bucket.tx()?.writable() {

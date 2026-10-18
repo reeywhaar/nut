@@ -33,6 +33,9 @@ pub(crate) struct TxInner {
     /// if transaction closed then ref points to null
     pub(crate) db: RwLock<WeakDB>,
 
+    /// is transaction closed
+    pub(crate) closed: AtomicBool,
+
     /// transaction meta
     pub(crate) meta: RwLock<Meta>,
 
@@ -96,17 +99,8 @@ impl Tx {
 
     /// Defines whether transaction is fresh and not been used before
     /// commiting transaction twice must resolve in error
-    pub(crate) fn opened(&self) -> Result<bool, Error> {
-        match self
-            .0
-            .db
-            .try_read()
-            .ok_or_else(|| Error::lock("db"))?
-            .upgrade()
-        {
-            None => Ok(false),
-            Some(db) => Ok(db.opened()),
-        }
+    pub(crate) fn opened(&self) -> bool {
+        !self.0.closed.load(Ordering::Acquire)
     }
 
     /// Returns a reference to the database that created the transaction.
@@ -374,6 +368,7 @@ impl Tx {
         let mut db = self.db()?;
         let tx = db.remove_tx(self)?;
 
+        tx.0.closed.store(true, Ordering::Release);
         *tx.0.db.write() = WeakDB::new();
         tx.0.root
             .try_write()
@@ -864,7 +859,7 @@ impl Tx {
     /// Returns page information for a given page number.
     /// This is only safe for concurrent use when used by a writable transaction.
     pub fn page_info(&self, id: usize) -> Result<Option<PageInfo>, Error> {
-        if !self.opened()? {
+        if !self.opened() {
             return Err(Error::TxClosed);
         };
         if id >= self.pgid()? as usize {

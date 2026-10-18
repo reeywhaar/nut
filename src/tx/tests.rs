@@ -313,3 +313,21 @@ fn create_bucket_returns_bucket_errors() {
         Some(Error::NameRequired)
     );
 }
+
+#[test]
+fn closed_tx_reports_closed() {
+    let mut db = db_mock().build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut bucket = tx.create_bucket(b"data").unwrap();
+        bucket.put(b"key", b"value".to_vec()).unwrap();
+    }
+    assert!(!tx_mock().opened());
+
+    let tx = db.begin_tx().unwrap();
+    assert!(tx.opened());
+    assert!(tx.cursor().first().unwrap().key.is_some());
+    tx.rollback().unwrap();
+    assert!(!tx.opened());
+    assert_eq!(tx.cursor().first().err(), Some(Error::TxClosed));
+}

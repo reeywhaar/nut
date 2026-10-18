@@ -219,7 +219,7 @@ impl Bucket {
     pub fn create_bucket(&mut self, key: &[u8]) -> Result<&mut Bucket, Error> {
         {
             let tx = self.tx()?;
-            if !tx.opened()? {
+            if !tx.opened() {
                 return Err(Error::TxClosed);
             }
             if !tx.writable() {
@@ -277,7 +277,7 @@ impl Bucket {
     pub fn delete_bucket(&mut self, key: &[u8]) -> Result<(), Error> {
         {
             let tx = self.tx()?;
-            if !tx.opened()? {
+            if !tx.opened() {
                 return Err(Error::DatabaseClosed);
             }
             if !tx.writable() {
@@ -390,7 +390,7 @@ impl Bucket {
     /// flowers.put(b"irises", b"Iris is a genus of species of flowering plants".to_vec()).unwrap()
     /// ```
     pub fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
-        if !self.tx()?.opened()? {
+        if !self.tx()?.opened() {
             return Err(Error::TxClosed);
         }
         if !self.tx()?.writable() {
@@ -502,7 +502,7 @@ impl Bucket {
         &self,
         mut handler: Box<dyn FnMut(&[u8], Option<&[u8]>) -> Result<(), E> + 'a>,
     ) -> Result<(), Error> {
-        if !self.tx()?.opened()? {
+        if !self.tx()?.opened() {
             return Err(Error::TxClosed);
         }
         let c = self.cursor()?;
