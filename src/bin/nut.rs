@@ -233,7 +233,7 @@ fn info(o: InfoOptions) -> Result<()> {
             let mut count = 0;
             let mut bucket_keys = vec![];
             tx.for_each(Box::new(|key, bucket| -> Result<(), String> {
-                stats += bucket.ok_or("Not a bucket")?.stats();
+                stats += bucket.ok_or("Not a bucket")?.try_stats()?;
                 bucket_keys.push(key.to_vec());
                 count += 1;
                 Ok(())
@@ -386,10 +386,10 @@ fn tree_writer(
         )
         .map_err(|_| "Can't write output")?;
 
-        let buckets = ubucket.buckets();
+        let buckets = ubucket.try_buckets()?;
 
         for b_name in buckets {
-            tree_writer(indent_level + 1, out, &b_name, ubucket.bucket(&b_name))?;
+            tree_writer(indent_level + 1, out, &b_name, ubucket.try_bucket(&b_name)?)?;
         }
     };
 

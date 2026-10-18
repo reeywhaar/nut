@@ -184,7 +184,14 @@ impl Tx {
             .try_read()
             .ok_or_else(|| Error::lock("bucket"))?;
 
-        RwLockReadGuard::try_map(bucket, |b| b.bucket(key)).map_err(|_| "Can't get bucket".into())
+        let mut error = None;
+        RwLockReadGuard::try_map(bucket, |b| {
+            b.try_bucket(key).unwrap_or_else(|e| {
+                error = Some(e);
+                None
+            })
+        })
+        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
     }
 
     /// Bucket retrieves a mutable bucket by name.
@@ -201,13 +208,24 @@ impl Tx {
             .try_write()
             .ok_or_else(|| Error::lock("bucket"))?;
 
-        RwLockWriteGuard::try_map(bucket, |b| b.bucket_mut(key))
-            .map_err(|_| "Can't get bucket".into())
+        let mut error = None;
+        RwLockWriteGuard::try_map(bucket, |b| {
+            b.try_bucket_mut(key).unwrap_or_else(|e| {
+                error = Some(e);
+                None
+            })
+        })
+        .map_err(|_| error.unwrap_or_else(|| "Can't get bucket".into()))
     }
 
     /// returns bucket keys for db
     pub fn buckets(&self) -> Vec<Vec<u8>> {
-        self.0.root.read().buckets()
+        self.try_buckets().unwrap()
+    }
+
+    /// Same as [`Tx::buckets`], but returns an error instead of panicking.
+    pub fn try_buckets(&self) -> Result<Vec<Vec<u8>>, Error> {
+        self.0.root.read().try_buckets()
     }
 
     /// Creates a new bucket.
@@ -281,9 +299,11 @@ impl Tx {
             .root
             .try_write()
             .ok_or_else(|| Error::lock("bucket"))?;
-        root.for_each(Box::new(|k: &[u8], _v: Option<&[u8]>| -> Result<(), E> {
-            handler(k, root.bucket(k))
-        }))
+        root.for_each(Box::new(
+            |k: &[u8], _v: Option<&[u8]>| -> Result<(), Error> {
+                handler(k, root.try_bucket(k)?).map_err(Into::into)
+            },
+        ))
     }
 
     /// Writes the entire database to a writer.
@@ -689,7 +709,7 @@ impl Tx {
         b.tx()?.for_each_page(b.bucket.root, 0, handler)?;
 
         b.for_each(Box::new(|k, _v| -> Result<(), Error> {
-            if let Some(child) = b.bucket(k) {
+            if let Some(child) = b.try_bucket(k)? {
                 self.check_bucket(child, reachable, freed, ch)?;
             };
             Ok(())

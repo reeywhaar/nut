@@ -296,8 +296,8 @@ impl Bucket {
         }
         let mut node = c.node()?;
         {
-            let child = self.bucket_mut(key).ok_or("Can't get bucket")?;
-            let child_buckets = child.buckets();
+            let child = self.try_bucket_mut(key)?.ok_or("Can't get bucket")?;
+            let child_buckets = child.try_buckets()?;
 
             for bucket in &child_buckets {
                 child.delete_bucket(bucket)?;
