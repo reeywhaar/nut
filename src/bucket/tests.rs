@@ -305,3 +305,64 @@ fn random_puts_and_deletes_match_model() {
         }
     }
 }
+
+#[test]
+fn many_child_buckets_survive_commit() {
+    let mut db = db_mock().page_size(1024).build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        for b in 0..1000u32 {
+            let mut bucket = tx.create_bucket(format!("bucket-{b}").as_bytes()).unwrap();
+            for i in 0..5u32 {
+                bucket.put(&i.to_be_bytes(), vec![7; 100]).unwrap();
+            }
+        }
+        tx.commit().unwrap();
+    }
+
+    let tx = db.begin_tx().unwrap();
+    for b in 0..1000u32 {
+        let bucket = tx.bucket(format!("bucket-{b}").as_bytes()).unwrap();
+        for i in 0..5u32 {
+            assert_eq!(
+                bucket.try_get(&i.to_be_bytes()).unwrap(),
+                Some(&[7; 100][..]),
+                "bucket {b}, key {i}"
+            );
+        }
+    }
+}
+
+#[test]
+fn child_bucket_references_survive_opening_others() {
+    let mut db = db_mock().build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut parent = tx.create_bucket(b"parent").unwrap();
+        for b in 0..1000u32 {
+            let child = parent
+                .create_bucket(format!("child-{b}").as_bytes())
+                .unwrap();
+            child
+                .put(b"key", format!("value-{b}").into_bytes())
+                .unwrap();
+        }
+        drop(parent);
+        tx.commit().unwrap();
+    }
+
+    let tx = db.begin_tx().unwrap();
+    let parent = tx.bucket(b"parent").unwrap();
+    let first = parent.try_bucket(b"child-0").unwrap().unwrap();
+    for b in 1..1000u32 {
+        let child = parent
+            .try_bucket(format!("child-{b}").as_bytes())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            child.try_get(b"key").unwrap(),
+            Some(format!("value-{b}").as_bytes())
+        );
+    }
+    assert_eq!(first.try_get(b"key").unwrap(), Some(&b"value-0"[..]));
+}

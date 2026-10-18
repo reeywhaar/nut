@@ -25,7 +25,7 @@ pub struct Bucket {
     pub(crate) tx: WeakTx,
 
     /// subbucket cache
-    buckets: RefCell<HashMap<Vec<u8>, Bucket>>,
+    buckets: RefCell<HashMap<Vec<u8>, Box<Bucket>>>,
 
     /// inline page reference
     page: Option<OwnedPage>,
@@ -108,7 +108,7 @@ impl Bucket {
 
     fn bucket_ptr(&self, name: &[u8]) -> Result<Option<*mut Bucket>, Error> {
         if let Some(b) = self.buckets.borrow_mut().get_mut(name) {
-            return Ok(Some(b));
+            return Ok(Some(&raw mut **b));
         };
         let value = {
             let c = self.cursor()?;
@@ -127,14 +127,14 @@ impl Bucket {
 
         let mut buckets = self.buckets.borrow_mut();
         let bucket = match buckets.entry(name.to_vec()) {
-            Entry::Vacant(e) => e.insert(child),
+            Entry::Vacant(e) => e.insert(Box::new(child)),
             Entry::Occupied(e) => {
                 let c = e.into_mut();
-                *c = child;
+                **c = child;
                 c
             }
         };
-        Ok(Some(bucket))
+        Ok(Some(&raw mut **bucket))
     }
 
     /// Retrieves a nested bucket by name.
