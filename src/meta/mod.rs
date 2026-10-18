@@ -80,13 +80,13 @@ impl Meta {
     pub(crate) fn write(&mut self, p: &mut Page) -> Result<(), Error> {
         if self.root.root >= self.pgid {
             return Err(format!(
-                "root bucket pgid ({}) above high water mark ({})",
+                "Root bucket pgid ({}) above high water mark ({})",
                 self.root.root, self.pgid
             )
             .into());
         } else if self.freelist >= self.pgid {
             return Err(format!(
-                "freelist pgid ({}) above high water mark ({})",
+                "Freelist pgid ({}) above high water mark ({})",
                 self.freelist, self.pgid
             )
             .into());

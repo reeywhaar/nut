@@ -108,7 +108,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         self.stack
             .borrow_mut()
             .last_mut()
-            .ok_or("stack empty")?
+            .ok_or("Stack empty")?
             .index = index;
 
         // Recursively search to the next page.
@@ -139,7 +139,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         self.stack
             .borrow_mut()
             .last_mut()
-            .ok_or("stack empty")?
+            .ok_or("Stack empty")?
             .index = index;
 
         // Recursively search to the next page.
@@ -167,7 +167,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         }
 
         // If we have a page then search its leaf elements.
-        let page = el_ref.el.upgrade().left().ok_or("left empty")?;
+        let page = el_ref.el.upgrade().left().ok_or("Left empty")?;
         let inodes = page.leaf_page_elements();
         let index = match inodes.binary_search_by(|inode| inode.key().cmp(key)) {
             Ok(v) => v,
@@ -181,7 +181,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     /// Returns the key and value of the current leaf element.
     fn key_value(&self) -> Result<CursorItem<'a>, Error> {
         let stack = self.stack.borrow();
-        let el_ref = stack.last().ok_or("stack empty")?;
+        let el_ref = stack.last().ok_or("Stack empty")?;
         Ok(CursorItem::from(el_ref))
     }
 
@@ -194,7 +194,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         // If the top of the stack is a leaf node then just return it.
         {
             let stack = self.stack.borrow();
-            let el = &stack.last().ok_or("stack empty")?;
+            let el = &stack.last().ok_or("Stack empty")?;
             if el.is_leaf() && el.el.is_right() {
                 return Ok(el.el.as_ref().right().unwrap().clone());
             }
@@ -240,7 +240,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
         self.first_leaf()?;
 
-        let is_empty = { self.stack.borrow().last().ok_or("stack empty")?.count() == 0 };
+        let is_empty = { self.stack.borrow().last().ok_or("Stack empty")?.count() == 0 };
 
         if is_empty {
             self.next_leaf()?;
@@ -257,7 +257,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     pub(crate) fn first_leaf(&self) -> Result<(), Error> {
         let mut stack = self.stack.borrow_mut();
         loop {
-            let el_ref = &stack.last().ok_or("stack empty")?;
+            let el_ref = &stack.last().ok_or("Stack empty")?;
             if el_ref.is_leaf() {
                 break;
             };
@@ -307,7 +307,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
     pub(crate) fn last_leaf(&self) -> Result<(), Error> {
         let mut stack = self.stack.borrow_mut();
         loop {
-            let el_ref = stack.last().ok_or("stack empty")?;
+            let el_ref = stack.last().ok_or("Stack empty")?;
             if el_ref.is_leaf() {
                 break;
             }
@@ -370,7 +370,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
 
             self.first_leaf()?;
 
-            if self.stack.borrow().last().ok_or("stack empty")?.count() == 0 {
+            if self.stack.borrow().last().ok_or("Stack empty")?.count() == 0 {
                 continue;
             }
 
@@ -428,7 +428,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         let mut item = self.seek_to_item(seek)?;
         let el_ref = {
             let stack = self.stack.borrow();
-            stack.last().ok_or("stack empty")?.clone()
+            stack.last().ok_or("Stack empty")?.clone()
         };
 
         if el_ref.index >= el_ref.count() {
@@ -455,7 +455,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
         self.search(seek, self.bucket.bucket.root)?;
         {
             let stack = self.stack.borrow();
-            let el_ref = stack.last().ok_or("stack empty")?;
+            let el_ref = stack.last().ok_or("Stack empty")?;
             if el_ref.index >= el_ref.count() {
                 return Ok(CursorItem::new_null(None, None));
             }
@@ -479,7 +479,7 @@ impl<'a, B: Deref<Target = Bucket> + 'a> Cursor<'a, B> {
             if (item.flags & Bucket::FLAG) != 0 {
                 return Err(Error::IncompatibleValue);
             }
-            item.key.ok_or("key empty")?.to_vec()
+            item.key.ok_or("Key empty")?.to_vec()
         };
 
         self.node()?.del(&key);

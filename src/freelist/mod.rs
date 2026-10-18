@@ -83,7 +83,7 @@ impl FreeList {
     /// If the page is already free then a panic will occur.
     pub(crate) fn free(&mut self, txid: TXID, p: &Page) -> Result<(), Error> {
         if p.id <= 1 {
-            return Err(format!("cannot free page 0 or 1: {}", p.id).into());
+            return Err(format!("Cannot free page 0 or 1: {}", p.id).into());
         }
 
         // Free page and all its overflow pages.
@@ -92,7 +92,7 @@ impl FreeList {
         for id in p.id..=max {
             // Verify that page is not already free.
             if self.cache.contains_key(&id) {
-                return Err(format!("page {id} already freed").into());
+                return Err(format!("Page {id} already freed").into());
             }
 
             // Add to the freelist and cache.

@@ -132,7 +132,7 @@ impl Tx {
 
     /// Returns the transaction page id.
     pub(crate) fn set_pgid(&mut self, id: PGID) -> Result<(), Error> {
-        self.0.meta.try_write().ok_or("pgid locked")?.pgid = id;
+        self.0.meta.try_write().ok_or("Pgid locked")?.pgid = id;
         Ok(())
     }
 
@@ -261,7 +261,7 @@ impl Tx {
         let mut file =
             db.0.file
                 .try_write()
-                .ok_or("can't obtain file write access")?;
+                .ok_or("Can't obtain file write access")?;
 
         let mut written = 0;
 
@@ -490,7 +490,7 @@ impl Tx {
             if let Some(estr) = estr {
                 errs.push(estr.clone());
             } else {
-                errs.push(format!("check thread panicked: {e:?}"));
+                errs.push(format!("Check thread panicked: {e:?}"));
             }
         }
 
@@ -528,7 +528,7 @@ impl Tx {
 
         for id in &all_pgids {
             if freed.contains_key(id) {
-                return Err(format!("page {id}: already freed").into());
+                return Err(format!("Page {id}: already freed").into());
             }
             freed.insert(*id, true);
         }
@@ -570,7 +570,7 @@ impl Tx {
             let is_reachable = reachable.contains_key(&i);
             let is_freed = freed.contains_key(&i);
             if !is_reachable && !is_freed {
-                ch.send(format!("page {i}: unreachable unfreed")).unwrap();
+                ch.send(format!("Page {i}: unreachable unfreed")).unwrap();
             };
         }
     }
@@ -590,14 +590,14 @@ impl Tx {
 
         let handler = Box::new(|p: &Page, _pgid: usize| {
             if p.id > meta_pgid {
-                ch.send(format!("page {}: out of bounds: {}", p.id, meta_pgid))
+                ch.send(format!("Page {}: out of bounds: {}", p.id, meta_pgid))
                     .unwrap();
             }
 
             for i in 0..=p.overflow {
                 let id = p.id + u64::from(i);
                 if reachable.contains_key(&id) {
-                    ch.send(format!("page {id}: multiple references")).unwrap();
+                    ch.send(format!("Page {id}: multiple references")).unwrap();
                 }
                 reachable.insert(id, true);
             }
@@ -605,9 +605,9 @@ impl Tx {
             let page_type_is_valid = matches!(p.flags, Flags::BRANCHES | Flags::LEAVES);
 
             if freed.contains_key(&p.id) {
-                ch.send(format!("page {}: reachable freed", p.id)).unwrap();
+                ch.send(format!("Page {}: reachable freed", p.id)).unwrap();
             } else if !page_type_is_valid {
-                ch.send(format!("page {}: invalid type: {}", p.id, p.flags))
+                ch.send(format!("Page {}: invalid type: {}", p.id, p.flags))
                     .unwrap();
             }
         });

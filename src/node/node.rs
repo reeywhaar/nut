@@ -74,11 +74,11 @@ impl Node {
     /// Returns the child node at a given index.
     pub fn child_at(&mut self, index: usize) -> Result<Node, Error> {
         if self.is_leaf() {
-            return Err(format!("invalid childAt({index}) on a leaf node").into());
+            return Err(format!("Invalid childAt({index}) on a leaf node").into());
         }
         Ok(self
             .bucket_mut()
-            .ok_or("bucket empty")?
+            .ok_or("Bucket empty")?
             .node(self.0.inodes.borrow()[index].pgid, WeakNode::from(self)))
     }
 
@@ -165,7 +165,7 @@ impl Node {
 
             let fp = self
                 .bucket()
-                .ok_or("bucket empty")?
+                .ok_or("Bucket empty")?
                 .fill_percent
                 .clamp(Bucket::MIN_FILL_PERCENT, Bucket::MAX_FILL_PERCENT);
             let threshold = (fp * page_size as f64) as usize;
@@ -181,7 +181,7 @@ impl Node {
         *next.0.inodes.borrow_mut() = nodes;
 
         self.bucket_mut()
-            .ok_or("bucket empty")?
+            .ok_or("Bucket empty")?
             .tx()?
             .0
             .stats
@@ -198,7 +198,7 @@ impl Node {
             return Ok(());
         }
 
-        let page_size = self.bucket().ok_or("bucket empty")?.tx()?.db()?.page_size();
+        let page_size = self.bucket().ok_or("Bucket empty")?.tx()?.db()?.page_size();
         {
             let mut children = self.0.children.borrow_mut().clone();
             children.sort_by(Node::cmp_by_key);
@@ -220,7 +220,7 @@ impl Node {
                 }
             };
 
-            let bucket = self.bucket_mut().ok_or("bucket empty")?;
+            let bucket = self.bucket_mut().ok_or("Bucket empty")?;
             let mut tx = bucket.tx()?;
             let db = tx.db()?;
             let txid = tx.id();

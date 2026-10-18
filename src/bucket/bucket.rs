@@ -664,14 +664,14 @@ impl Bucket {
             let item = c.seek(name)?;
             if item.key != Some(name.as_slice()) {
                 return Err(format!(
-                    "misplaced bucket header: {:?} -> {:?}",
+                    "Misplaced bucket header: {:?} -> {:?}",
                     name,
                     item.key.as_ref().unwrap()
                 )
                 .into());
             }
             if !item.is_bucket() {
-                return Err(format!("unexpected bucket header flag: {}", item.flags).into());
+                return Err(format!("Unexpected bucket header flag: {}", item.flags).into());
             }
             c.node()?.put(name, name, value, 0, Self::FLAG);
         }
@@ -683,7 +683,7 @@ impl Bucket {
 
         {
             // Spill nodes.
-            let mut root_node = self.root_node.clone().ok_or("root node empty")?.root();
+            let mut root_node = self.root_node.clone().ok_or("Root node empty")?.root();
             root_node.spill()?;
             self.root_node = Some(root_node);
 
@@ -823,13 +823,13 @@ impl Bucket {
         // differently. We'll return the rootNode (if available) or the fake page.
         if self.bucket.root == 0 {
             if id != 0 {
-                return Err(format!("inline bucket non-zero page access: {id} != 0").into());
+                return Err(format!("Inline bucket non-zero page access: {id} != 0").into());
             }
             if let Some(ref node) = self.root_node {
                 return Ok(PageNode::from(node.clone()));
             }
             return Ok(PageNode::from(
-                &raw const **self.page.as_ref().ok_or("page empty")?,
+                &raw const **self.page.as_ref().ok_or("Page empty")?,
             ));
         }
 

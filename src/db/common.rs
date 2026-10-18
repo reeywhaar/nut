@@ -66,7 +66,7 @@ impl Batch {
 
     pub(super) fn push(&mut self, call: Call) -> Result<(), Error> {
         if self.0.ran.load(Ordering::Acquire) {
-            return Err("batch already run".into());
+            return Err("Batch already run".into());
         };
         let calls_len = {
             let mut calls = self

@@ -128,7 +128,7 @@ impl<'a> DB {
             memmap2::MmapOptions::new()
                 .offset(0)
                 .map(&file)
-                .map_err(|e| format!("mmap failed: {e}"))?
+                .map_err(|e| format!("Mmap failed: {e}"))?
         };
 
         let mut db = Self(Arc::new(DBInner {
@@ -248,7 +248,7 @@ impl<'a> DB {
                     return Err("No write transaction exists".into());
                 };
                 if !Arc::ptr_eq(&tx.0, &db_tx.as_ref().unwrap().0) {
-                    return Err("trying to remove unowned transaction".into());
+                    return Err("Trying to remove unowned transaction".into());
                 };
                 db_tx.take().unwrap()
             };
@@ -596,8 +596,8 @@ impl<'a> DB {
     pub(crate) fn write_at<T: Read>(&mut self, pos: u64, mut buf: T) -> Result<(), Error> {
         let mut file = self.0.file.write();
         file.seek(SeekFrom::Start(pos))
-            .map_err(|_e| "can't seek to position")?;
-        std::io::copy(&mut buf, &mut *file).map_err(|_e| "can't write buffer")?;
+            .map_err(|_e| "Can't seek to position")?;
+        std::io::copy(&mut buf, &mut *file).map_err(|_e| "Can't write buffer")?;
         Ok(())
     }
 
@@ -606,12 +606,12 @@ impl<'a> DB {
             .0
             .file
             .try_read_for(Duration::from_secs(60))
-            .ok_or("can't acquire file lock")?;
+            .ok_or("Can't acquire file lock")?;
         let mut mmap = self
             .0
             .mmap
             .try_write_for(Duration::from_secs(600))
-            .ok_or("can't acquire mmap lock")?;
+            .ok_or("Can't acquire mmap lock")?;
 
         let init_min_size = self.0.page_size as u64 * 4;
 
@@ -627,7 +627,7 @@ impl<'a> DB {
             let file_len = file
                 .get_ref()
                 .metadata()
-                .map_err(|_| "can't get file metadata")?
+                .map_err(|_| "Can't get file metadata")?
                 .len();
             size = u64::min(size, file_len);
         }
@@ -647,7 +647,7 @@ impl<'a> DB {
                 .offset(0)
                 .len(size as usize)
                 .map(file.get_ref())
-                .map_err(|e| format!("mmap failed: {e}"))?
+                .map_err(|e| format!("Mmap failed: {e}"))?
         };
         *mmap_size = nmmap.len();
         *mmap = nmmap;
@@ -665,7 +665,7 @@ impl<'a> DB {
         if let Err(e) = check0
             && check1.is_err()
         {
-            return Err(format!("mmap fail: {e}").into());
+            return Err(format!("Mmap fail: {e}").into());
         }
 
         Ok(())
@@ -681,7 +681,7 @@ impl<'a> DB {
 
         // Verify the requested size is not above the maximum allowed.
         if size > MAX_MAP_SIZE {
-            return Err("mmap too large".into());
+            return Err("Mmap too large".into());
         };
 
         // If larger than 1GB then grow by 1GB at a time.
@@ -710,7 +710,7 @@ impl<'a> DB {
             .file
             .write()
             .flush()
-            .map_err(|_e| "can't sync data".into())
+            .map_err(|_e| "Can't sync data".into())
     }
 
     pub fn stats(&self) -> Stats {
@@ -828,13 +828,13 @@ impl<'a> DB {
             .map_err(|_e| Error::ResizeFail)?;
 
         if !self.0.no_grow_sync {
-            file.get_ref().sync_all().map_err(|_| "can't flush file")?;
+            file.get_ref().sync_all().map_err(|_| "Can't flush file")?;
         }
 
         *self.0.file_size.write() = file
             .get_ref()
             .metadata()
-            .map_err(|_| "can't get metadata file")?
+            .map_err(|_| "Can't get metadata file")?
             .len();
         Ok(())
     }
