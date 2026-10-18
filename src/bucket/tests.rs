@@ -1,6 +1,11 @@
 use crate::db::tests::db_mock;
 use crate::errors::Error;
+use crate::test_utils::test_seed;
 use crate::tx::WeakTx;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{RngExt, SeedableRng};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::Bucket;
 
@@ -163,4 +168,123 @@ fn open_bucket_checks_value() {
             "Page 0: data out of bounds".to_string()
         ]))
     );
+}
+
+#[test]
+fn delete_many_keys_rebalances() {
+    let mut db = db_mock().build().unwrap();
+    let n: u64 = 20_000;
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut b = tx.create_bucket(b"data").unwrap();
+        for i in 0..n {
+            b.put(&i.to_be_bytes(), vec![7; 64]).unwrap();
+        }
+        drop(b);
+        tx.commit().unwrap();
+    }
+    for round in 0..4u64 {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut b = tx.bucket_mut(b"data").unwrap();
+        for i in (round..n).step_by(4) {
+            b.delete(&i.to_be_bytes()).unwrap();
+        }
+        drop(b);
+        tx.commit().unwrap();
+    }
+    let tx = db.begin_tx().unwrap();
+    let b = tx.bucket(b"data").unwrap();
+    for i in 0..n {
+        assert!(b.try_get(&i.to_be_bytes()).unwrap().is_none(), "key {i}");
+    }
+}
+
+#[test]
+fn delete_random_order() {
+    let seed = test_seed();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let n: u64 = 20_000;
+    let mut db = db_mock().page_size(1024).build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut b = tx.create_bucket(b"data").unwrap();
+        for i in 0..n {
+            b.put(&i.to_be_bytes(), vec![7; 64]).unwrap();
+        }
+        drop(b);
+        tx.commit().unwrap();
+    }
+
+    let mut keys: Vec<u64> = (0..n).collect();
+    keys.shuffle(&mut rng);
+    let mut alive: BTreeSet<u64> = (0..n).collect();
+    for (round, chunk) in keys.chunks(4_000).enumerate() {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut b = tx.bucket_mut(b"data").unwrap();
+        for key in chunk {
+            b.delete(&key.to_be_bytes()).unwrap();
+            alive.remove(key);
+        }
+        drop(b);
+        tx.commit()
+            .unwrap_or_else(|e| panic!("seed {seed}: commit after round {round}: {e}"));
+
+        let tx = db.begin_tx().unwrap();
+        let b = tx.bucket(b"data").unwrap();
+        for key in 0..n {
+            assert_eq!(
+                b.try_get(&key.to_be_bytes()).unwrap().is_some(),
+                alive.contains(&key),
+                "seed {seed}: key {key} after round {round}"
+            );
+        }
+    }
+}
+
+#[test]
+fn random_puts_and_deletes_match_model() {
+    let seed = test_seed();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut db = db_mock().page_size(1024).build().unwrap();
+    {
+        let mut tx = db.begin_rw_tx().unwrap();
+        let _ = tx.create_bucket(b"data").unwrap();
+        tx.commit().unwrap();
+    }
+
+    let mut model = BTreeMap::<u64, Vec<u8>>::new();
+    for round in 0..40 {
+        let delete_chance = if round < 20 { 1 } else { 3 };
+        let mut tx = db.begin_rw_tx().unwrap();
+        let mut b = tx.bucket_mut(b"data").unwrap();
+        for _ in 0..500 {
+            let key = rng.random_range(0..5_000u64);
+            if rng.random_range(0..4) < delete_chance {
+                b.delete(&key.to_be_bytes()).unwrap();
+                model.remove(&key);
+            } else {
+                let len = if rng.random_range(0..50) == 0 {
+                    5_000
+                } else {
+                    rng.random_range(1..200)
+                };
+                let value = vec![rng.random_range(0..=255u8); len];
+                b.put(&key.to_be_bytes(), value.clone()).unwrap();
+                model.insert(key, value);
+            }
+        }
+        drop(b);
+        tx.commit()
+            .unwrap_or_else(|e| panic!("seed {seed}: commit after round {round}: {e}"));
+
+        let tx = db.begin_tx().unwrap();
+        let b = tx.bucket(b"data").unwrap();
+        for key in 0..5_000u64 {
+            assert_eq!(
+                b.try_get(&key.to_be_bytes()).unwrap(),
+                model.get(&key).map(|v| v.as_slice()),
+                "seed {seed}: key {key} after round {round}"
+            );
+        }
+    }
 }
