@@ -23,19 +23,19 @@ cli = ["dep:clap", "dep:hexdump", "dep:anstyle"]
 [dependencies]
 fnv = "1.0.7"
 poolcache = "0.1.1"
-memoffset = "0.9.0"
+memoffset = "0.9.1"
 fs2 = "0.4.3"
 page_size = "0.6.0"
-memmap2 = "0.9.3"
+memmap2 = "0.9.11"
 scopeguard = "1.2.0"
-bitflags = "2.4.2"
-either = "1.9.0"
-lock_api = "0.4.11"
-parking_lot = "0.12.1"
-clap = { version = "4.4.18", features = ["derive"], optional = true }
-hexdump = { version = "0.1.1", optional = true }
+bitflags = "2.13.2"
+either = "1.19.0"
+lock_api = "0.4.14"
+parking_lot = "0.12.5"
+clap = { version = "4.6.7", features = ["derive"], optional = true }
+hexdump = { version = "0.1.3", optional = true }
 anstyle = { version = "1.0.14", optional = true }
 
 [dev-dependencies]
-rand = "0.8.5"
-assert_cmd = "2.0.13"
+rand = "0.10.3"
+assert_cmd = "2.2.2"

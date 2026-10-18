@@ -1,9 +1,9 @@
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use rand::{distr::Alphanumeric, rng, RngExt};
 use std::env::temp_dir;
 use std::path::PathBuf;
 
 pub(crate) fn random_string(len: usize) -> String {
-    thread_rng()
+    rng()
         .sample_iter(&Alphanumeric)
         .take(len)
         .map(char::from)
