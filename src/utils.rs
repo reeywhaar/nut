@@ -81,16 +81,6 @@ pub fn hexdump_slice<T: Sized>(input: &[T], max: usize) {
     eprintln!("{:x?}", buf);
 }
 
-pub fn clamp<T: PartialOrd>(n: T, min: T, max: T) -> T {
-    if n < min {
-        return min;
-    }
-    if n > max {
-        return max;
-    }
-    n
-}
-
 #[cfg(test)]
 pub mod tests {
     use super::{find_contiguous, slice_to_u8_slice, to_u8_slice};

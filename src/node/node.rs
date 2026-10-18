@@ -6,7 +6,6 @@ use crate::bucket::Bucket;
 use crate::consts::{Flags, MIN_KEYS_PER_PAGE, PGID};
 use crate::errors::Error;
 use crate::page::{BranchPageElement, LeafPageElement, Page};
-use crate::utils::clamp;
 
 use super::{INode, NodeBuilder};
 
@@ -164,11 +163,11 @@ impl Node {
                 return Ok(None);
             }
 
-            let fp = clamp(
-                self.bucket().ok_or("bucket empty")?.fill_percent,
-                Bucket::MIN_FILL_PERCENT,
-                Bucket::MAX_FILL_PERCENT,
-            );
+            let fp = self
+                .bucket()
+                .ok_or("bucket empty")?
+                .fill_percent
+                .clamp(Bucket::MIN_FILL_PERCENT, Bucket::MAX_FILL_PERCENT);
             let threshold = (fp * page_size as f64) as usize;
             let (split_index, _) = self.split_index(threshold);
             split_index
