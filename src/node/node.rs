@@ -78,7 +78,7 @@ impl Node {
         }
         Ok(self
             .bucket_mut()
-            .unwrap()
+            .ok_or("bucket empty")?
             .node(self.0.inodes.borrow()[index].pgid, WeakNode::from(self)))
     }
 
@@ -198,7 +198,7 @@ impl Node {
             return Ok(());
         }
 
-        let page_size = self.bucket().unwrap().tx()?.db()?.page_size();
+        let page_size = self.bucket().ok_or("bucket empty")?.tx()?.db()?.page_size();
         {
             let mut children = self.0.children.borrow_mut().clone();
             children.sort_by(Node::cmp_by_key);
@@ -220,7 +220,7 @@ impl Node {
                 }
             };
 
-            let bucket = self.bucket_mut().unwrap();
+            let bucket = self.bucket_mut().ok_or("bucket empty")?;
             let mut tx = bucket.tx()?;
             let db = tx.db()?;
             let txid = tx.id();
@@ -233,8 +233,7 @@ impl Node {
                         db.0.freelist
                             .try_write()
                             .unwrap()
-                            .free(txid, unsafe { &*tx.page(node_pgid)? })
-                            .unwrap();
+                            .free(txid, unsafe { &*tx.page(node_pgid)? })?;
                         *node.0.pgid.borrow_mut() = 0;
                     }
                 }

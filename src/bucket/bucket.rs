@@ -238,7 +238,7 @@ impl Bucket {
             bucket.fill_percent = Self::DEFAULT_FILL_PERCENT;
 
             let value = bucket.write();
-            cursor.node().unwrap().put(key, key, value, 0, Self::FLAG);
+            cursor.node()?.put(key, key, value, 0, Self::FLAG);
             self.page = None;
         }
 
@@ -391,7 +391,7 @@ impl Bucket {
         }
 
         // Insert into node.
-        c.node().unwrap().put(key, key, value, 0, 0);
+        c.node()?.put(key, key, value, 0, 0);
 
         Ok(())
     }
@@ -429,7 +429,7 @@ impl Bucket {
         };
 
         // Delete the node if we have a matching key.
-        c.node().unwrap().del(key);
+        c.node()?.del(key);
 
         Ok(())
     }

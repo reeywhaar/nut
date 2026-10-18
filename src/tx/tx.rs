@@ -514,14 +514,7 @@ impl Tx {
 
     pub fn freed(&self) -> Result<HashMap<PGID, bool>, Error> {
         let mut freed = HashMap::<PGID, bool>::new();
-        let all_pgids = self
-            .db()
-            .unwrap()
-            .0
-            .freelist
-            .try_read()
-            .unwrap()
-            .get_pgids();
+        let all_pgids = self.db()?.0.freelist.try_read().unwrap().get_pgids();
 
         for id in &all_pgids {
             if freed.contains_key(id) {

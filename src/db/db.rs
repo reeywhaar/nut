@@ -795,7 +795,7 @@ impl<'a> DB {
 
         let file = self.0.file.try_write().unwrap();
 
-        if file.get_ref().metadata().unwrap().len() >= size {
+        if file.get_ref().metadata()?.len() >= size {
             return Ok(());
         }
 
