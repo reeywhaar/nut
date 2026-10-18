@@ -254,3 +254,9 @@ fn try_stats_reports_lock_error() {
     assert_eq!(db.try_stats().err(), Some(Error::lock("stats")));
     drop(stats);
 }
+
+#[test]
+fn info_points_to_mmap() {
+    let db = db_mock().build().unwrap();
+    assert_eq!(db.info().data, db.0.mmap.read().as_ptr());
+}

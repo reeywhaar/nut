@@ -755,7 +755,7 @@ impl<'a> DB {
             .mmap
             .try_read()
             .ok_or_else(|| Error::lock("mmap"))?
-            .as_ref()[0] as *const u8;
+            .as_ptr();
         Ok(Info {
             data: ptr,
             page_size: self.0.page_size as i64,
